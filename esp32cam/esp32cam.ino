@@ -81,6 +81,11 @@ void connectWiFi() {
 }
 
 void sendPhoto() {
+  // Discard stale buffered frame
+  camera_fb_t *stale = esp_camera_fb_get();
+  if (stale) esp_camera_fb_return(stale);
+
+  // Capture fresh frame
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Capture failed");
