@@ -8,13 +8,10 @@ import logging
 import numpy as np
 import cv2
 import onnxruntime as ort
-import requests
 
 log = logging.getLogger(__name__)
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
-MODEL_PATH = os.path.join(MODEL_DIR, "yolov8n.onnx")
-MODEL_URL = "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.onnx"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8n.onnx")
 
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -27,23 +24,9 @@ OVERLAP_THRESHOLD = 0.3  # fraction of spot area that must be covered by a vehic
 _session = None
 
 
-def _download_model():
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    if os.path.isfile(MODEL_PATH):
-        return
-    log.info(f"Downloading YOLOv8n ONNX model...")
-    resp = requests.get(MODEL_URL, stream=True, timeout=120)
-    resp.raise_for_status()
-    with open(MODEL_PATH, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8192):
-            f.write(chunk)
-    log.info(f"Model saved to {MODEL_PATH} ({os.path.getsize(MODEL_PATH)} bytes)")
-
-
 def _get_session():
     global _session
     if _session is None:
-        _download_model()
         _session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
     return _session
 

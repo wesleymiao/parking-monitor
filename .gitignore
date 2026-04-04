@@ -2,4 +2,4 @@ __pycache__/
 *.pyc
 uploads/
 .env
-model/
+yolov8n.pt
