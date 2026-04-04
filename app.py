@@ -22,7 +22,8 @@ else:
     # Local development
     UPLOAD_DIR = os.path.join(app.root_path, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-DEPLOY_TIME = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+GMT8 = datetime.timezone(datetime.timedelta(hours=8))
+DEPLOY_TIME = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
 
 
 @app.route("/")
