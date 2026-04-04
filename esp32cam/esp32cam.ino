@@ -103,9 +103,6 @@ void sendPhoto() {
     }
   }
 
-  // Flash LED briefly to indicate upload
-  digitalWrite(LED_PIN, HIGH);
-
   HTTPClient http;
   http.begin(serverUrl);
   http.addHeader("Content-Type", "image/jpeg");
@@ -117,16 +114,11 @@ void sendPhoto() {
 
   http.end();
   esp_camera_fb_return(fb);
-
-  digitalWrite(LED_PIN, LOW);
 }
 
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-CAM Parking Monitor");
-
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
 
   initCamera();
   connectWiFi();
