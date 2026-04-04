@@ -11,6 +11,7 @@ app = Flask(__name__)
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
 API_KEY = os.environ.get("API_KEY", DEFAULT_KEY)
 DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
 TOTAL_SPOTS = int(os.environ.get("TOTAL_SPOTS", "6"))
 
 log = logging.getLogger(__name__)
@@ -85,23 +86,28 @@ def notify_if_changed(result, filename):
     previous_open_spots = current_open
 
     if not current_open:
-        message = f"🅿️ Parking Update ({filename})\nNo open spots."
+        title = "Parking Update"
+        text = f"### 🅿️ Parking Update\n\n**No open spots.**\n\n![image]({BASE_URL}/images/{filename})"
     else:
         spots = ", ".join(f"#{s}" for s in current_open)
-        message = f"🅿️ Parking Update ({filename})\n{len(current_open)}/{result['total']} spots open: {spots}"
+        title = f"{len(current_open)}/{result['total']} spots open"
+        text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({BASE_URL}/images/{filename})"
 
-    log.info(f"Notification: {message}")
-    send_dingtalk(message)
+    log.info(f"Notification: {title}")
+    send_dingtalk(title, text)
 
 
-def send_dingtalk(message):
+def send_dingtalk(title, text):
     if not DINGTALK_WEBHOOK:
         log.warning("DingTalk not configured, skipping notification")
         return
     try:
         resp = http_requests.post(DINGTALK_WEBHOOK, json={
-            "msgtype": "text",
-            "text": {"content": message},
+            "msgtype": "markdown",
+            "markdown": {
+                "title": title,
+                "text": text,
+            },
         }, timeout=10)
         log.info(f"DingTalk response: {resp.status_code} {resp.text}")
     except Exception as e:
