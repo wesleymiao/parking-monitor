@@ -10,8 +10,7 @@ app = Flask(__name__)
 
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
 API_KEY = os.environ.get("API_KEY", DEFAULT_KEY)
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
 TOTAL_SPOTS = int(os.environ.get("TOTAL_SPOTS", "6"))
 
 log = logging.getLogger(__name__)
@@ -75,7 +74,7 @@ def detect_open_spots(image_path):
 
 
 def notify_if_changed(result, filename):
-    """Send Telegram notification when open spots change."""
+    """Send DingTalk notification when open spots change."""
     global previous_open_spots
     current_open = result["open"]
 
@@ -92,22 +91,21 @@ def notify_if_changed(result, filename):
         message = f"🅿️ Parking Update ({filename})\n{len(current_open)}/{result['total']} spots open: {spots}"
 
     log.info(f"Notification: {message}")
-    send_telegram(message)
+    send_dingtalk(message)
 
 
-def send_telegram(message):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        log.warning("Telegram not configured, skipping notification")
+def send_dingtalk(message):
+    if not DINGTALK_WEBHOOK:
+        log.warning("DingTalk not configured, skipping notification")
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        resp = http_requests.post(url, json={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
+        resp = http_requests.post(DINGTALK_WEBHOOK, json={
+            "msgtype": "text",
+            "text": {"content": message},
         }, timeout=10)
-        log.info(f"Telegram response: {resp.status_code}")
+        log.info(f"DingTalk response: {resp.status_code} {resp.text}")
     except Exception as e:
-        log.error(f"Telegram send failed: {e}")
+        log.error(f"DingTalk send failed: {e}")
 
 
 @app.route("/images")
