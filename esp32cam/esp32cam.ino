@@ -52,9 +52,10 @@ void initCamera() {
   config.pin_reset    = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size   = FRAMESIZE_VGA;  // 640x480
+  config.frame_size   = FRAMESIZE_XGA;  // 1024x768
   config.jpeg_quality = 12;
-  config.fb_count     = 2;
+  config.fb_count     = 1;
+  config.grab_mode    = CAMERA_GRAB_LATEST;  // always get latest frame
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -81,11 +82,6 @@ void connectWiFi() {
 }
 
 void sendPhoto() {
-  // Discard stale buffered frame
-  camera_fb_t *stale = esp_camera_fb_get();
-  if (stale) esp_camera_fb_return(stale);
-
-  // Capture fresh frame
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Capture failed");
