@@ -58,8 +58,17 @@ def list_images():
     return jsonify(images)
 
 
-@app.route("/images/<filename>")
+@app.route("/images/<filename>", methods=["GET", "DELETE"])
 def get_image(filename):
+    if request.method == "DELETE":
+        key = request.headers.get("X-API-Key")
+        if key != API_KEY:
+            abort(401)
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        if not os.path.isfile(filepath):
+            return "Not found", 404
+        os.remove(filepath)
+        return "Deleted", 200
     return send_from_directory(UPLOAD_DIR, filename)
 
 

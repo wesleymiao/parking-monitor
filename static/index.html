@@ -59,6 +59,24 @@
             transition: transform 0.15s;
         }
         .gallery img:hover { transform: scale(1.03); }
+        .gallery-item { position: relative; }
+        .gallery-item .delete-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(220, 40, 40, 0.85);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 24px;
+            padding: 0;
+            display: none;
+        }
+        .gallery-item:hover .delete-btn { display: block; }
 
         .refresh-btn {
             background: none;
@@ -153,10 +171,32 @@
                 const res = await fetch("/images");
                 const images = await res.json();
                 gallery.innerHTML = images.map(name =>
-                    `<img src="/images/${name}" alt="${name}" title="${name}">`
+                    `<div class="gallery-item">
+                        <img src="/images/${name}" alt="${name}" title="${name}">
+                        <button class="delete-btn" onclick="deleteImage('${name}')">&times;</button>
+                    </div>`
                 ).join("");
             } catch {
                 gallery.innerHTML = "";
+            }
+        }
+
+        async function deleteImage(name) {
+            if (!confirm(`Delete ${name}?`)) return;
+            const apiKey = document.getElementById("apiKey").value;
+            try {
+                const res = await fetch(`/images/${name}`, {
+                    method: "DELETE",
+                    headers: { "X-API-Key": apiKey }
+                });
+                if (res.ok) {
+                    loadLatest();
+                    loadGallery();
+                } else {
+                    alert(`Delete failed: ${res.status}`);
+                }
+            } catch (err) {
+                alert(`Delete failed: ${err.message}`);
             }
         }
 
