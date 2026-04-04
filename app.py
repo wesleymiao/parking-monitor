@@ -22,11 +22,17 @@ else:
     # Local development
     UPLOAD_DIR = os.path.join(app.root_path, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+DEPLOY_TIME = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
+
+
+@app.route("/info")
+def info():
+    return jsonify({"deploy_time": DEPLOY_TIME})
 
 
 @app.route("/upload", methods=["POST"])

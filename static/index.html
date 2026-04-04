@@ -103,6 +103,7 @@
 </head>
 <body>
     <h1>Parking Monitor</h1>
+    <p id="deployTime" style="color:#888; font-size:13px; margin-bottom:15px;"></p>
 
     <div class="upload-form">
         <h2>Upload Image</h2>
@@ -225,6 +226,10 @@
                 alert(`Delete failed: ${err.message}`);
             }
         }
+
+        fetch("/info").then(r => r.json()).then(d => {
+            document.getElementById("deployTime").textContent = `Last deployed: ${d.deploy_time}`;
+        });
 
         loadLatest();
         loadGallery();
