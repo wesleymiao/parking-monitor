@@ -11,7 +11,6 @@ app = Flask(__name__)
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
 API_KEY = os.environ.get("API_KEY", DEFAULT_KEY)
 DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000")
 TOTAL_SPOTS = int(os.environ.get("TOTAL_SPOTS", "6"))
 
 log = logging.getLogger(__name__)
@@ -58,7 +57,8 @@ def upload():
         f.write(data)
 
     result = detect_open_spots(filepath)
-    notify_if_changed(result, filename)
+    image_url = f"{request.host_url}images/{filename}"
+    notify_if_changed(result, image_url)
 
     return jsonify({"filename": filename, "size": len(data), "detection": result}), 200
 
@@ -74,7 +74,7 @@ def detect_open_spots(image_path):
     }
 
 
-def notify_if_changed(result, filename):
+def notify_if_changed(result, image_url):
     """Send DingTalk notification when open spots change."""
     global previous_open_spots
     current_open = result["open"]
@@ -87,11 +87,11 @@ def notify_if_changed(result, filename):
 
     if not current_open:
         title = "Parking Update"
-        text = f"### 🅿️ Parking Update\n\n**No open spots.**\n\n![image]({BASE_URL}/images/{filename})"
+        text = f"### 🅿️ Parking Update\n\n**No open spots.**\n\n![image]({image_url})"
     else:
         spots = ", ".join(f"#{s}" for s in current_open)
         title = f"{len(current_open)}/{result['total']} spots open"
-        text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({BASE_URL}/images/{filename})"
+        text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
 
     log.info(f"Notification: {title}")
     send_dingtalk(title, text)
