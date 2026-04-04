@@ -37,6 +37,7 @@ def _preprocess(img):
     scale = min(INPUT_SIZE / w, INPUT_SIZE / h)
     new_w, new_h = int(w * scale), int(h * scale)
     resized = cv2.resize(img, (new_w, new_h))
+    resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
     # Pad to 640x640
     padded = np.full((INPUT_SIZE, INPUT_SIZE, 3), 114, dtype=np.uint8)
