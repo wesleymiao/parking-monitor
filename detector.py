@@ -20,7 +20,6 @@ INPUT_SIZE = 640
 CONF_THRESHOLD = 0.35
 IOU_THRESHOLD = 0.45
 OVERLAP_THRESHOLD = 0.3  # fraction of spot area that must be covered by a vehicle
-DIFF_THRESHOLD = 35  # mean pixel diff for fallback check
 
 _session = None
 
@@ -120,28 +119,16 @@ def _box_overlap(spot_box, vehicle_box):
     return intersection / spot_area
 
 
-def _check_diff(img, ref, spot):
-    """Check if a spot region differs from the reference (empty lot)."""
-    h, w = img.shape[:2]
-    sx1 = int(spot["x"] * w)
-    sy1 = int(spot["y"] * h)
-    sx2 = sx1 + int(spot["w"] * w)
-    sy2 = sy1 + int(spot["h"] * h)
-
-    img_roi = cv2.GaussianBlur(cv2.cvtColor(img[sy1:sy2, sx1:sx2], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-    ref_roi = cv2.GaussianBlur(cv2.cvtColor(ref[sy1:sy2, sx1:sx2], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-
-    if img_roi.size == 0 or ref_roi.size == 0:
-        return 0.0
-    return float(np.mean(cv2.absdiff(img_roi, ref_roi)))
-
-
-def detect(image_path, spots, reference_path=None):
+def detect(image_path, spots):
     """
-    Hybrid detection:
-    1. YOLO detects vehicle -> occupied
-    2. No YOLO hit + diff from reference is high -> occupied (covered/occluded)
-    3. No YOLO hit + diff from reference is low -> open
+    Detect open/occupied parking spots using YOLOv8s.
+
+    Args:
+        image_path: path to the image file
+        spots: list of spot dicts with id, x, y, w, h (normalized 0-1)
+
+    Returns:
+        dict with total, open, occupied lists and vehicle detections
     """
     img = cv2.imread(image_path)
     if img is None:
@@ -150,20 +137,13 @@ def detect(image_path, spots, reference_path=None):
     h, w = img.shape[:2]
     session = _get_session()
 
-    # Run YOLO
+    # Run YOLO inference
     blob, scale, _, _ = _preprocess(img)
     input_name = session.get_inputs()[0].name
     output = session.run(None, {input_name: blob})
     vehicles = _postprocess(output[0], scale)
 
     log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
-
-    # Load reference for fallback
-    ref = None
-    if reference_path and os.path.isfile(reference_path):
-        ref = cv2.imread(reference_path)
-        if ref is not None and ref.shape[:2] != (h, w):
-            ref = cv2.resize(ref, (w, h))
 
     open_spots = []
     occupied_spots = []
@@ -175,31 +155,19 @@ def detect(image_path, spots, reference_path=None):
         sy2 = sy1 + spot["h"] * h
         spot_box = [sx1, sy1, sx2, sy2]
 
-        # Step 1: YOLO detection
-        yolo_hit = False
+        is_occupied = False
         for v in vehicles:
             overlap = _box_overlap(spot_box, v["box"])
             if overlap >= OVERLAP_THRESHOLD:
-                yolo_hit = True
-                log.info(f"Spot {spot['id']}: occupied (YOLO: {v['class']}, overlap={overlap:.2f})")
+                is_occupied = True
+                log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={overlap:.2f})")
                 break
 
-        if yolo_hit:
+        if is_occupied:
             occupied_spots.append(spot["id"])
-            continue
-
-        # Step 2: Fallback — diff from reference
-        if ref is not None:
-            diff = _check_diff(img, ref, spot)
-            if diff > DIFF_THRESHOLD:
-                occupied_spots.append(spot["id"])
-                log.info(f"Spot {spot['id']}: occupied (diff={diff:.1f}, covered/occluded)")
-                continue
-            log.info(f"Spot {spot['id']}: open (diff={diff:.1f})")
         else:
-            log.info(f"Spot {spot['id']}: open (no YOLO hit, no reference)")
-
-        open_spots.append(spot["id"])
+            open_spots.append(spot["id"])
+            log.info(f"Spot {spot['id']}: open")
 
     # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
