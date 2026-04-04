@@ -127,7 +127,7 @@ def detect_open_spots(image_path):
     if not spots:
         log.warning("Detection not calibrated — no spots defined")
         return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
-    return detect_vehicles(image_path, spots)
+    return detect_vehicles(image_path, spots, reference_path=REFERENCE_FILE)
 
 
 def notify_if_changed(result, image_url):
