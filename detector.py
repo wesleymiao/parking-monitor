@@ -11,7 +11,7 @@ import onnxruntime as ort
 
 log = logging.getLogger(__name__)
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8n.onnx")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8s.onnx")
 
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -20,7 +20,6 @@ INPUT_SIZE = 640
 CONF_THRESHOLD = 0.35
 IOU_THRESHOLD = 0.45
 OVERLAP_THRESHOLD = 0.3  # fraction of spot area that must be covered by a vehicle
-DIFF_THRESHOLD = 35  # mean pixel diff above this = something is in the spot
 
 _session = None
 
@@ -120,37 +119,13 @@ def _box_overlap(spot_box, vehicle_box):
     return intersection / spot_area
 
 
-def _check_diff(img, ref, spot):
-    """Check if a spot region differs significantly from the reference image."""
-    h, w = img.shape[:2]
-    sx1 = int(spot["x"] * w)
-    sy1 = int(spot["y"] * h)
-    sx2 = sx1 + int(spot["w"] * w)
-    sy2 = sy1 + int(spot["h"] * h)
-
-    img_roi = cv2.cvtColor(img[sy1:sy2, sx1:sx2], cv2.COLOR_BGR2GRAY)
-    ref_roi = cv2.cvtColor(ref[sy1:sy2, sx1:sx2], cv2.COLOR_BGR2GRAY)
-    img_roi = cv2.GaussianBlur(img_roi, (5, 5), 0)
-    ref_roi = cv2.GaussianBlur(ref_roi, (5, 5), 0)
-
-    if img_roi.size == 0 or ref_roi.size == 0:
-        return 0.0
-
-    return float(np.mean(cv2.absdiff(img_roi, ref_roi)))
-
-
-def detect(image_path, spots, reference_path=None):
+def detect(image_path, spots):
     """
-    Detect open/occupied parking spots using hybrid approach:
-    1. YOLO detects vehicles -> occupied
-    2. For spots with no YOLO hit, compare to reference image
-       If spot looks different from empty reference -> occupied (covered car, occlusion)
-       If spot looks like reference -> open
+    Detect open/occupied parking spots using YOLOv8s.
 
     Args:
         image_path: path to the image file
         spots: list of spot dicts with id, x, y, w, h (normalized 0-1)
-        reference_path: path to empty parking lot reference image
 
     Returns:
         dict with total, open, occupied lists and vehicle detections
@@ -170,13 +145,6 @@ def detect(image_path, spots, reference_path=None):
 
     log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 
-    # Load reference image for fallback diff check
-    ref = None
-    if reference_path and os.path.isfile(reference_path):
-        ref = cv2.imread(reference_path)
-        if ref is not None and ref.shape[:2] != (h, w):
-            ref = cv2.resize(ref, (w, h))
-
     open_spots = []
     occupied_spots = []
 
@@ -187,32 +155,19 @@ def detect(image_path, spots, reference_path=None):
         sy2 = sy1 + spot["h"] * h
         spot_box = [sx1, sy1, sx2, sy2]
 
-        # Step 1: Check YOLO detections
-        yolo_hit = False
+        is_occupied = False
         for v in vehicles:
             overlap = _box_overlap(spot_box, v["box"])
             if overlap >= OVERLAP_THRESHOLD:
-                yolo_hit = True
-                log.info(f"Spot {spot['id']}: occupied (YOLO: {v['class']}, overlap={overlap:.2f})")
+                is_occupied = True
+                log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={overlap:.2f})")
                 break
 
-        if yolo_hit:
+        if is_occupied:
             occupied_spots.append(spot["id"])
-            continue
-
-        # Step 2: No YOLO hit — fall back to reference diff
-        if ref is not None:
-            diff = _check_diff(img, ref, spot)
-            if diff > DIFF_THRESHOLD:
-                occupied_spots.append(spot["id"])
-                log.info(f"Spot {spot['id']}: occupied (diff={diff:.1f}, likely covered/occluded)")
-                continue
-            else:
-                log.info(f"Spot {spot['id']}: open (diff={diff:.1f}, matches reference)")
         else:
-            log.info(f"Spot {spot['id']}: open (no YOLO hit, no reference for diff)")
-
-        open_spots.append(spot["id"])
+            open_spots.append(spot["id"])
+            log.info(f"Spot {spot['id']}: open")
 
     # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
