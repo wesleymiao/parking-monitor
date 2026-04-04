@@ -33,6 +33,18 @@
         .status.ok { color: green; }
         .status.err { color: red; }
 
+        .detection-result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+        .detection-result.active { display: block; }
+        .spot-open { color: green; font-weight: 600; }
+        .spot-occupied { color: #888; }
+
         .latest-section {
             background: #fff;
             padding: 20px;
@@ -103,6 +115,7 @@
             <button type="submit">Upload</button>
         </form>
         <div id="status" class="status"></div>
+        <div id="detectionResult" class="detection-result"></div>
     </div>
 
     <div class="latest-section">
@@ -137,6 +150,7 @@
                     const data = await res.json();
                     statusEl.textContent = `Uploaded: ${data.filename} (${data.size} bytes)`;
                     statusEl.className = "status ok";
+                    showDetection(data.detection);
                     loadLatest();
                     loadGallery();
                 } else {
@@ -179,6 +193,18 @@
             } catch {
                 gallery.innerHTML = "";
             }
+        }
+
+        function showDetection(det) {
+            const el = document.getElementById("detectionResult");
+            if (!det) { el.className = "detection-result"; return; }
+            const spots = Array.from({length: det.total}, (_, i) => i + 1).map(s =>
+                det.open.includes(s)
+                    ? `<span class="spot-open">#${s} open</span>`
+                    : `<span class="spot-occupied">#${s} occupied</span>`
+            ).join(" &middot; ");
+            el.innerHTML = `<strong>Detection:</strong> ${det.open.length}/${det.total} spots open<br>${spots}`;
+            el.className = "detection-result active";
         }
 
         async function deleteImage(name) {
