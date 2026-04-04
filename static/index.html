@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Monitor</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        h1 { margin-bottom: 20px; }
+        h2 { margin: 20px 0 10px; }
+
+        .upload-form {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .upload-form label { display: block; margin-bottom: 6px; font-weight: 600; }
+        .upload-form input[type="file"] { margin-bottom: 12px; }
+        .upload-form button {
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .upload-form button:hover { background: #006abc; }
+        .status { margin-top: 10px; font-size: 14px; }
+        .status.ok { color: green; }
+        .status.err { color: red; }
+
+        .latest-section {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .latest-section img {
+            max-width: 100%;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .latest-section .no-image { color: #888; font-style: italic; }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+        }
+        .gallery img {
+            width: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .gallery img:hover { transform: scale(1.03); }
+
+        .refresh-btn {
+            background: none;
+            border: 1px solid #ccc;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Parking Monitor</h1>
+
+    <div class="upload-form">
+        <h2>Upload Image</h2>
+        <form id="uploadForm">
+            <label for="apiKey">API Key</label>
+            <input type="text" id="apiKey" value="0bac0b5f-43c6-59f2-9e6e-2c3c60674f3d" style="width:100%; padding:6px; margin-bottom:12px;">
+            <label for="fileInput">Select Image</label>
+            <input type="file" id="fileInput" accept="image/jpeg,image/png">
+            <br>
+            <button type="submit">Upload</button>
+        </form>
+        <div id="status" class="status"></div>
+    </div>
+
+    <div class="latest-section">
+        <h2>Latest Image <button class="refresh-btn" onclick="loadLatest()">Refresh</button></h2>
+        <div id="latestContainer"><span class="no-image">No images yet</span></div>
+    </div>
+
+    <h2>All Images <button class="refresh-btn" onclick="loadGallery()">Refresh</button></h2>
+    <div id="gallery" class="gallery"></div>
+
+    <script>
+        const uploadForm = document.getElementById("uploadForm");
+        const statusEl = document.getElementById("status");
+
+        uploadForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const file = document.getElementById("fileInput").files[0];
+            const apiKey = document.getElementById("apiKey").value;
+            if (!file) {
+                statusEl.textContent = "Please select a file.";
+                statusEl.className = "status err";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("api_key", apiKey);
+
+            try {
+                const res = await fetch("/upload", { method: "POST", body: formData });
+                if (res.ok) {
+                    const data = await res.json();
+                    statusEl.textContent = `Uploaded: ${data.filename} (${data.size} bytes)`;
+                    statusEl.className = "status ok";
+                    loadLatest();
+                    loadGallery();
+                } else {
+                    statusEl.textContent = `Error: ${res.status} ${res.statusText}`;
+                    statusEl.className = "status err";
+                }
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}`;
+                statusEl.className = "status err";
+            }
+        });
+
+        async function loadLatest() {
+            const container = document.getElementById("latestContainer");
+            try {
+                const res = await fetch("/images/latest");
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    container.innerHTML = `<img src="${url}" alt="Latest parking image">`;
+                } else {
+                    container.innerHTML = '<span class="no-image">No images yet</span>';
+                }
+            } catch {
+                container.innerHTML = '<span class="no-image">Failed to load</span>';
+            }
+        }
+
+        async function loadGallery() {
+            const gallery = document.getElementById("gallery");
+            try {
+                const res = await fetch("/images");
+                const images = await res.json();
+                gallery.innerHTML = images.map(name =>
+                    `<img src="/images/${name}" alt="${name}" title="${name}">`
+                ).join("");
+            } catch {
+                gallery.innerHTML = "";
+            }
+        }
+
+        loadLatest();
+        loadGallery();
+    </script>
+</body>
+</html>
