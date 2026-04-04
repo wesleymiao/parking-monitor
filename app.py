@@ -7,7 +7,12 @@ app = Flask(__name__)
 
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
 API_KEY = os.environ.get("API_KEY", DEFAULT_KEY)
-UPLOAD_DIR = os.path.join(app.root_path, "uploads")
+if os.environ.get("WEBSITE_SITE_NAME"):
+    # Azure App Service — use persistent storage outside the app directory
+    UPLOAD_DIR = "/home/uploads"
+else:
+    # Local development
+    UPLOAD_DIR = os.path.join(app.root_path, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
