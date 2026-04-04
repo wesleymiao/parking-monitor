@@ -17,9 +17,9 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8m.onnx")
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 INPUT_SIZE = 640
-CONF_THRESHOLD = 0.35
+CONF_THRESHOLD = 0.2
 IOU_THRESHOLD = 0.45
-OVERLAP_THRESHOLD = 0.3  # fraction of spot area that must be covered by a vehicle
+OVERLAP_THRESHOLD = 0.15  # fraction of spot area that must be covered by a vehicle
 
 _session = None
 
