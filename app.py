@@ -31,8 +31,21 @@ CONFIG_DIR = os.path.join(UPLOAD_DIR, "config")
 os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "spots.json")
 REFERENCE_FILE = os.path.join(CONFIG_DIR, "reference.jpg")
+METADATA_FILE = os.path.join(CONFIG_DIR, "metadata.json")
 GMT8 = datetime.timezone(datetime.timedelta(hours=8))
 DEPLOY_TIME = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def load_metadata():
+    if os.path.isfile(METADATA_FILE):
+        with open(METADATA_FILE) as f:
+            return json.load(f)
+    return {}
+
+
+def save_metadata(meta):
+    with open(METADATA_FILE, "w") as f:
+        json.dump(meta, f)
 
 
 def load_spots():
@@ -121,7 +134,16 @@ def upload():
     with open(filepath, "wb") as f:
         f.write(data)
 
-    log.info(f"Saved {filename} ({len(data)} bytes), running detection...")
+    meta = load_metadata()
+    source = "ESP32-CAM" if request.content_type == "image/jpeg" else "Web"
+    meta[filename] = {
+        "source": source,
+        "ip": request.remote_addr,
+        "time": datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    save_metadata(meta)
+
+    log.info(f"Saved {filename} ({len(data)} bytes) from {source}, running detection...")
     result = detect_open_spots(filepath)
     log.info(f"Detection result: {result}")
     labeled = result.get("labeled_image", filename)
@@ -182,8 +204,17 @@ def send_dingtalk(title, text):
 @app.route("/images")
 def list_images():
     files = sorted(os.listdir(UPLOAD_DIR), reverse=True)
-    images = [f for f in files if f.endswith(".jpg")]
-    return jsonify(images)
+    images = [f for f in files if f.endswith(".jpg") and "_labeled" not in f]
+    meta = load_metadata()
+    result = []
+    for name in images:
+        info = meta.get(name, {})
+        result.append({
+            "filename": name,
+            "source": info.get("source", "Unknown"),
+            "time": info.get("time", ""),
+        })
+    return jsonify(result)
 
 
 @app.route("/images/<filename>", methods=["GET", "DELETE"])
