@@ -162,15 +162,8 @@ def detect_open_spots(image_path):
 
 
 def notify_if_changed(result, image_url):
-    """Send DingTalk notification when open spots change."""
-    global previous_open_spots
+    """Send DingTalk notification for every upload."""
     current_open = result["open"]
-
-    if previous_open_spots is not None and set(current_open) == set(previous_open_spots):
-        log.info("No change in open spots, skipping notification")
-        return
-
-    previous_open_spots = current_open
 
     if not current_open:
         title = "Parking Update"
