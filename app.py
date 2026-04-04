@@ -204,14 +204,16 @@ def send_dingtalk(title, text):
 @app.route("/images")
 def list_images():
     files = sorted(os.listdir(UPLOAD_DIR), reverse=True)
-    images = [f for f in files if f.endswith(".jpg") and "_labeled" not in f]
+    images = [f for f in files if f.endswith(".jpg")]
     meta = load_metadata()
     result = []
     for name in images:
-        info = meta.get(name, {})
+        is_labeled = "_labeled" in name
+        original = name.replace("_labeled", "")
+        info = meta.get(original, {})
         result.append({
             "filename": name,
-            "source": info.get("source", "Unknown"),
+            "source": "Labeled" if is_labeled else info.get("source", "Unknown"),
             "time": info.get("time", ""),
         })
     return jsonify(result)
