@@ -1,8 +1,10 @@
 import os
+import json
 import uuid
-import random
 import datetime
 import logging
+import numpy as np
+import cv2
 import requests as http_requests
 from flask import Flask, request, abort, send_from_directory, jsonify
 
@@ -11,7 +13,6 @@ app = Flask(__name__)
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
 API_KEY = os.environ.get("API_KEY", DEFAULT_KEY)
 DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
-TOTAL_SPOTS = int(os.environ.get("TOTAL_SPOTS", "6"))
 
 log = logging.getLogger(__name__)
 previous_open_spots = None
@@ -22,8 +23,25 @@ else:
     # Local development
     UPLOAD_DIR = os.path.join(app.root_path, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+CONFIG_DIR = os.path.join(UPLOAD_DIR, "config")
+os.makedirs(CONFIG_DIR, exist_ok=True)
+CONFIG_FILE = os.path.join(CONFIG_DIR, "spots.json")
+REFERENCE_FILE = os.path.join(CONFIG_DIR, "reference.jpg")
+DIFF_THRESHOLD = int(os.environ.get("DIFF_THRESHOLD", "40"))
 GMT8 = datetime.timezone(datetime.timedelta(hours=8))
 DEPLOY_TIME = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def load_spots():
+    if os.path.isfile(CONFIG_FILE):
+        with open(CONFIG_FILE) as f:
+            return json.load(f)
+    return []
+
+
+def save_spots(spots):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(spots, f)
 
 
 @app.route("/")
@@ -34,6 +52,41 @@ def index():
 @app.route("/info")
 def info():
     return jsonify({"deploy_time": DEPLOY_TIME})
+
+
+@app.route("/calibrate")
+def calibrate():
+    return send_from_directory("static", "calibrate.html")
+
+
+@app.route("/config/reference", methods=["GET", "POST"])
+def config_reference():
+    key = request.headers.get("X-API-Key") or request.form.get("api_key")
+    if key != API_KEY:
+        abort(401)
+    if request.method == "POST":
+        if "file" in request.files:
+            data = request.files["file"].read()
+        else:
+            data = request.data
+        with open(REFERENCE_FILE, "wb") as f:
+            f.write(data)
+        return "OK", 200
+    if not os.path.isfile(REFERENCE_FILE):
+        return "No reference image", 404
+    return send_from_directory(CONFIG_DIR, "reference.jpg")
+
+
+@app.route("/config/spots", methods=["GET", "POST"])
+def config_spots():
+    if request.method == "POST":
+        key = request.headers.get("X-API-Key") or (request.json.get("api_key") if request.is_json else request.form.get("api_key"))
+        if key != API_KEY:
+            abort(401)
+        spots = request.json.get("spots", [])
+        save_spots(spots)
+        return jsonify({"count": len(spots)}), 200
+    return jsonify(load_spots())
 
 
 @app.route("/upload", methods=["POST"])
@@ -71,13 +124,55 @@ def upload():
 
 
 def detect_open_spots(image_path):
-    """Mock detection — returns random results. Replace with real CV later."""
-    open_spots = random.sample(range(1, TOTAL_SPOTS + 1), random.randint(0, TOTAL_SPOTS))
-    open_spots.sort()
+    spots = load_spots()
+    if not spots or not os.path.isfile(REFERENCE_FILE):
+        log.warning("Detection not calibrated — no reference or spots defined")
+        return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
+
+    ref = cv2.imread(REFERENCE_FILE)
+    img = cv2.imread(image_path)
+    if ref is None or img is None:
+        return {"total": 0, "open": [], "occupied": [], "error": "cannot read images"}
+
+    # Resize img to match reference if needed
+    if ref.shape[:2] != img.shape[:2]:
+        img = cv2.resize(img, (ref.shape[1], ref.shape[0]))
+
+    # Convert to grayscale and blur to reduce noise
+    ref_gray = cv2.GaussianBlur(cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+    img_gray = cv2.GaussianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+
+    open_spots = []
+    occupied_spots = []
+
+    for spot in spots:
+        x = int(spot["x"] * ref.shape[1])
+        y = int(spot["y"] * ref.shape[0])
+        w = int(spot["w"] * ref.shape[1])
+        h = int(spot["h"] * ref.shape[0])
+
+        ref_roi = ref_gray[y:y+h, x:x+w]
+        img_roi = img_gray[y:y+h, x:x+w]
+
+        if ref_roi.size == 0 or img_roi.size == 0:
+            continue
+
+        # Compute mean absolute difference
+        diff = cv2.absdiff(ref_roi, img_roi)
+        mean_diff = float(np.mean(diff))
+
+        spot_id = spot["id"]
+        if mean_diff > DIFF_THRESHOLD:
+            occupied_spots.append(spot_id)
+        else:
+            open_spots.append(spot_id)
+
+        log.info(f"Spot {spot_id}: diff={mean_diff:.1f} threshold={DIFF_THRESHOLD} -> {'occupied' if mean_diff > DIFF_THRESHOLD else 'open'}")
+
     return {
-        "total": TOTAL_SPOTS,
-        "open": open_spots,
-        "occupied": [s for s in range(1, TOTAL_SPOTS + 1) if s not in open_spots],
+        "total": len(spots),
+        "open": sorted(open_spots),
+        "occupied": sorted(occupied_spots),
     }
 
 

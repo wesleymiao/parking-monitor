@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Monitor - Calibrate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        h1 { margin-bottom: 8px; }
+        .subtitle { color: #666; margin-bottom: 20px; }
+        a { color: #0078d4; }
+
+        .section {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 { margin-bottom: 10px; }
+
+        .api-row { margin-bottom: 15px; }
+        .api-row label { font-weight: 600; display: block; margin-bottom: 4px; }
+        .api-row input { width: 100%; padding: 6px; }
+
+        .file-label {
+            display: block;
+            background: #f0f0f0;
+            border: 2px dashed #999;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 12px;
+        }
+        .file-label:hover { background: #e0e8f0; border-color: #0078d4; }
+        .file-label.has-file { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+        input[type="file"] { display: none; }
+
+        .btn {
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 8px;
+        }
+        .btn:hover { background: #006abc; }
+        .btn.danger { background: #d43; }
+        .btn.danger:hover { background: #b22; }
+        .btn.secondary { background: #666; }
+
+        .canvas-wrap {
+            position: relative;
+            margin-top: 10px;
+            display: inline-block;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: crosshair;
+            max-width: 100%;
+        }
+
+        .spot-list { margin-top: 10px; }
+        .spot-item {
+            display: inline-block;
+            padding: 4px 10px;
+            margin: 3px;
+            border-radius: 4px;
+            font-size: 13px;
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+        }
+
+        .instructions {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .status { margin-top: 10px; font-size: 14px; }
+        .status.ok { color: green; }
+        .status.err { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Calibrate Parking Spots</h1>
+    <p class="subtitle"><a href="/">Back to monitor</a></p>
+
+    <div class="section">
+        <div class="api-row">
+            <label>API Key</label>
+            <input type="text" id="apiKey" value="0bac0b5f-43c6-59f2-9e6e-2c3c60674f3d">
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Step 1: Set Reference Image</h2>
+        <p style="margin-bottom:10px; color:#666;">Upload a photo of the <strong>empty</strong> parking lot (no cars).</p>
+        <label for="refInput" class="file-label" id="refLabel">Tap to choose reference image</label>
+        <input type="file" id="refInput" accept="image/jpeg,image/png">
+        <button class="btn" onclick="uploadReference()">Upload Reference</button>
+        <span id="refStatus" class="status"></span>
+    </div>
+
+    <div class="section">
+        <h2>Step 2: Draw Parking Spots</h2>
+        <div class="instructions">
+            Click and drag on the image to draw a rectangle for each parking spot.
+            Draw all 5 spots, then click Save.
+        </div>
+        <button class="btn" onclick="loadReference()">Load Reference Image</button>
+        <button class="btn danger" onclick="undoSpot()">Undo Last</button>
+        <button class="btn danger" onclick="clearSpots()">Clear All</button>
+        <div class="canvas-wrap">
+            <canvas id="canvas" width="768" height="576"></canvas>
+        </div>
+        <div class="spot-list" id="spotList"></div>
+    </div>
+
+    <div class="section">
+        <h2>Step 3: Save Configuration</h2>
+        <button class="btn" onclick="saveSpots()">Save Spots</button>
+        <button class="btn secondary" onclick="loadSpots()">Load Saved</button>
+        <span id="saveStatus" class="status"></span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        let refImage = null;
+        let spots = [];
+        let drawing = false;
+        let startX, startY;
+
+        document.getElementById("refInput").addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            const label = document.getElementById("refLabel");
+            if (file) {
+                label.textContent = file.name;
+                label.classList.add("has-file");
+            }
+        });
+
+        async function uploadReference() {
+            const file = document.getElementById("refInput").files[0];
+            const status = document.getElementById("refStatus");
+            if (!file) { status.textContent = "Select a file first"; status.className = "status err"; return; }
+
+            const resized = await resizeForUpload(file);
+            const formData = new FormData();
+            formData.append("file", resized, file.name);
+            formData.append("api_key", document.getElementById("apiKey").value);
+
+            const res = await fetch("/config/reference", { method: "POST", body: formData });
+            if (res.ok) {
+                status.textContent = "Reference uploaded!";
+                status.className = "status ok";
+                loadReference();
+            } else {
+                status.textContent = `Error: ${res.status}`;
+                status.className = "status err";
+            }
+        }
+
+        function resizeForUpload(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        const MAX = 768;
+                        if (width <= MAX && height <= MAX) { resolve(file); return; }
+                        const scale = Math.min(MAX / width, MAX / height);
+                        width = Math.round(width * scale);
+                        height = Math.round(height * scale);
+                        const c = document.createElement("canvas");
+                        c.width = width; c.height = height;
+                        c.getContext("2d").drawImage(img, 0, 0, width, height);
+                        const dataUrl = c.toDataURL("image/jpeg", 0.85);
+                        const bin = atob(dataUrl.split(",")[1]);
+                        const arr = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                        resolve(new Blob([arr], { type: "image/jpeg" }));
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function loadReference() {
+            const apiKey = document.getElementById("apiKey").value;
+            const res = await fetch("/config/reference", { headers: { "X-API-Key": apiKey } });
+            if (!res.ok) { alert("No reference image. Upload one first."); return; }
+            const blob = await res.blob();
+            const img = new Image();
+            img.onload = () => {
+                refImage = img;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                redraw();
+            };
+            img.src = URL.createObjectURL(blob);
+        }
+
+        function redraw() {
+            if (!refImage) return;
+            ctx.drawImage(refImage, 0, 0);
+            spots.forEach((s, i) => {
+                const x = s.x * canvas.width, y = s.y * canvas.height;
+                const w = s.w * canvas.width, h = s.h * canvas.height;
+                ctx.strokeStyle = "#00e676";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, w, h);
+                ctx.fillStyle = "rgba(0, 230, 118, 0.2)";
+                ctx.fillRect(x, y, w, h);
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 16px system-ui";
+                ctx.fillText(`#${s.id}`, x + 4, y + 18);
+            });
+            updateSpotList();
+        }
+
+        function updateSpotList() {
+            const el = document.getElementById("spotList");
+            el.innerHTML = spots.map(s =>
+                `<span class="spot-item">#${s.id}</span>`
+            ).join("") || "<em>No spots drawn yet</em>";
+        }
+
+        function getCanvasPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches ? e.touches[0] : e;
+            return {
+                x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+                y: (touch.clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        canvas.addEventListener("mousedown", onStart);
+        canvas.addEventListener("mousemove", onMove);
+        canvas.addEventListener("mouseup", onEnd);
+        canvas.addEventListener("touchstart", (e) => { e.preventDefault(); onStart(e); });
+        canvas.addEventListener("touchmove", (e) => { e.preventDefault(); onMove(e); });
+        canvas.addEventListener("touchend", (e) => { e.preventDefault(); onEnd(e); });
+
+        function onStart(e) {
+            if (!refImage) return;
+            drawing = true;
+            const pos = getCanvasPos(e);
+            startX = pos.x;
+            startY = pos.y;
+        }
+
+        function onMove(e) {
+            if (!drawing || !refImage) return;
+            const pos = getCanvasPos(e);
+            redraw();
+            const x = Math.min(startX, pos.x), y = Math.min(startY, pos.y);
+            const w = Math.abs(pos.x - startX), h = Math.abs(pos.y - startY);
+            ctx.strokeStyle = "#ff9800";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+        }
+
+        function onEnd(e) {
+            if (!drawing || !refImage) return;
+            drawing = false;
+            const pos = e.changedTouches ? { x: startX, y: startY } : getCanvasPos(e);
+            // For touch, use last known position
+            const endPos = e.changedTouches ? getCanvasPos({ touches: e.changedTouches }) : getCanvasPos(e);
+            const x = Math.min(startX, endPos.x) / canvas.width;
+            const y = Math.min(startY, endPos.y) / canvas.height;
+            const w = Math.abs(endPos.x - startX) / canvas.width;
+            const h = Math.abs(endPos.y - startY) / canvas.height;
+
+            if (w < 0.01 || h < 0.01) return; // too small, ignore
+
+            spots.push({ id: spots.length + 1, x, y, w, h });
+            redraw();
+        }
+
+        function undoSpot() {
+            spots.pop();
+            redraw();
+        }
+
+        function clearSpots() {
+            spots = [];
+            redraw();
+        }
+
+        async function saveSpots() {
+            const apiKey = document.getElementById("apiKey").value;
+            const status = document.getElementById("saveStatus");
+            const res = await fetch("/config/spots", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+                body: JSON.stringify({ spots, api_key: apiKey })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                status.textContent = `Saved ${data.count} spots!`;
+                status.className = "status ok";
+            } else {
+                status.textContent = `Error: ${res.status}`;
+                status.className = "status err";
+            }
+        }
+
+        async function loadSpots() {
+            const res = await fetch("/config/spots");
+            if (res.ok) {
+                spots = await res.json();
+                redraw();
+            }
+        }
+
+        // Load existing config on page load
+        loadReference();
+        loadSpots();
+    </script>
+</body>
+</html>
