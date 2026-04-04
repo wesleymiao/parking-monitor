@@ -7,6 +7,11 @@ import requests as http_requests
 from flask import Flask, request, abort, send_from_directory, jsonify
 from detector import detect as detect_vehicles
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 app = Flask(__name__)
 
 DEFAULT_KEY = str(uuid.uuid5(uuid.NAMESPACE_DNS, "parking-monitor"))
@@ -89,8 +94,10 @@ def config_spots():
 
 @app.route("/upload", methods=["POST"])
 def upload():
+    log.info(f"POST /upload from {request.remote_addr}, content_type={request.content_type}")
     key = request.headers.get("X-API-Key") or request.form.get("api_key")
     if key != API_KEY:
+        log.warning(f"401 Unauthorized from {request.remote_addr}")
         abort(401)
 
     # Handle multipart form upload (from HTML form)
@@ -114,7 +121,9 @@ def upload():
     with open(filepath, "wb") as f:
         f.write(data)
 
+    log.info(f"Saved {filename} ({len(data)} bytes), running detection...")
     result = detect_open_spots(filepath)
+    log.info(f"Detection result: {result}")
     labeled = result.get("labeled_image", filename)
     image_url = f"{request.host_url}images/{labeled}"
     notify_if_changed(result, image_url)
