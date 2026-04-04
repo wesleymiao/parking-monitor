@@ -115,7 +115,8 @@ def upload():
         f.write(data)
 
     result = detect_open_spots(filepath)
-    image_url = f"{request.host_url}images/{filename}"
+    labeled = result.get("labeled_image", filename)
+    image_url = f"{request.host_url}images/{labeled}"
     notify_if_changed(result, image_url)
 
     return jsonify({"filename": filename, "size": len(data), "detection": result}), 200

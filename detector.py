@@ -168,9 +168,56 @@ def detect(image_path, spots):
         else:
             open_spots.append(spot["id"])
 
+    # Draw labeled image
+    labeled_path = image_path.replace(".jpg", "_labeled.jpg")
+    _draw_labels(img, spots, vehicles, open_spots, occupied_spots, labeled_path)
+
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
         "vehicles": len(vehicles),
+        "labeled_image": os.path.basename(labeled_path),
     }
+
+
+def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path):
+    """Draw spot regions and vehicle boxes on the image."""
+    labeled = img.copy()
+    h, w = labeled.shape[:2]
+
+    # Draw vehicle bounding boxes
+    for v in vehicles:
+        x1, y1, x2, y2 = [int(c) for c in v["box"]]
+        cv2.rectangle(labeled, (x1, y1), (x2, y2), (0, 165, 255), 2)
+        label = f"{v['class']} {v['score']:.0%}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(labeled, (x1, y1 - th - 6), (x1 + tw + 4, y1), (0, 165, 255), -1)
+        cv2.putText(labeled, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    # Draw spot regions
+    for spot in spots:
+        sx1 = int(spot["x"] * w)
+        sy1 = int(spot["y"] * h)
+        sx2 = sx1 + int(spot["w"] * w)
+        sy2 = sy1 + int(spot["h"] * h)
+        spot_id = spot["id"]
+
+        if spot_id in open_ids:
+            color = (0, 200, 0)  # green = open
+            status = "OPEN"
+        else:
+            color = (0, 0, 220)  # red = occupied
+            status = "OCCUPIED"
+
+        cv2.rectangle(labeled, (sx1, sy1), (sx2, sy2), color, 3)
+        overlay = labeled.copy()
+        cv2.rectangle(overlay, (sx1, sy1), (sx2, sy2), color, -1)
+        cv2.addWeighted(overlay, 0.15, labeled, 0.85, 0, labeled)
+
+        label = f"#{spot_id} {status}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        cv2.rectangle(labeled, (sx1, sy2 - th - 10), (sx1 + tw + 8, sy2), color, -1)
+        cv2.putText(labeled, label, (sx1 + 4, sy2 - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    cv2.imwrite(output_path, labeled)
