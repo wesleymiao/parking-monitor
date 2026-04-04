@@ -196,11 +196,18 @@ def send_dingtalk(title, text):
 
 @app.route("/images")
 def list_images():
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 100, type=int)
+
     files = sorted(os.listdir(UPLOAD_DIR), reverse=True)
     images = [f for f in files if f.endswith(".jpg")]
+    total = len(images)
+    start = (page - 1) * per_page
+    page_images = images[start:start + per_page]
+
     meta = load_metadata()
     result = []
-    for name in images:
+    for name in page_images:
         is_labeled = "_labeled" in name
         original = name.replace("_labeled", "")
         info = meta.get(original, {})
@@ -209,7 +216,7 @@ def list_images():
             "source": "Labeled" if is_labeled else info.get("source", "Unknown"),
             "time": info.get("time", ""),
         })
-    return jsonify(result)
+    return jsonify({"images": result, "page": page, "total": total, "pages": (total + per_page - 1) // per_page})
 
 
 @app.route("/images/<filename>", methods=["GET", "DELETE"])

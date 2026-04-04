@@ -130,6 +130,18 @@
             border-radius: 4px;
         }
 
+        .page-btn {
+            background: none;
+            border: 1px solid #ccc;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 3px;
+        }
+        .page-btn:hover { background: #e0e8f0; }
+        .page-btn.active { background: #0078d4; color: #fff; border-color: #0078d4; }
+
         .refresh-btn {
             background: none;
             border: 1px solid #ccc;
@@ -166,6 +178,7 @@
 
     <h2>All Images <button class="refresh-btn" onclick="loadGallery()">Refresh</button></h2>
     <div id="gallery" class="gallery"></div>
+    <div id="pagination" style="margin-top:15px; text-align:center;"></div>
 
     <div class="lightbox" id="lightbox" onclick="this.classList.remove('active')">
         <img id="lightboxImg" src="" alt="">
@@ -274,18 +287,33 @@
             }
         }
 
-        async function loadGallery() {
+        let currentPage = 1;
+
+        async function loadGallery(page) {
+            page = page || currentPage;
+            currentPage = page;
             const gallery = document.getElementById("gallery");
+            const pagination = document.getElementById("pagination");
             try {
-                const res = await fetch("/images");
-                const images = await res.json();
-                gallery.innerHTML = images.map(img =>
+                const res = await fetch(`/images?page=${page}`);
+                const data = await res.json();
+                gallery.innerHTML = data.images.map(img =>
                     `<div class="gallery-item">
                         <img src="/images/${img.filename}" alt="${img.filename}" onclick="openLightbox('/images/${img.filename}')">
                         <button class="delete-btn" onclick="deleteImage('${img.filename}')">&times;</button>
                         <div class="meta">${img.source}${img.time ? ' &middot; ' + img.time : ''}</div>
                     </div>`
                 ).join("");
+
+                if (data.pages > 1) {
+                    let btns = "";
+                    for (let i = 1; i <= data.pages; i++) {
+                        btns += `<button class="page-btn${i === page ? ' active' : ''}" onclick="loadGallery(${i})">${i}</button>`;
+                    }
+                    pagination.innerHTML = `<span style="color:#888; font-size:13px;">${data.total} images</span><br>${btns}`;
+                } else {
+                    pagination.innerHTML = "";
+                }
             } catch {
                 gallery.innerHTML = "";
             }
