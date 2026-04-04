@@ -18,7 +18,23 @@
             margin-bottom: 20px;
         }
         .upload-form label { display: block; margin-bottom: 6px; font-weight: 600; }
-        .upload-form input[type="file"] { margin-bottom: 12px; }
+        .upload-form input[type="file"] { display: none; }
+        .file-label {
+            display: block;
+            background: #f0f0f0;
+            border: 2px dashed #999;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 12px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .file-label:hover { background: #e0e8f0; border-color: #0078d4; }
+        .file-label.has-file { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
         .upload-form button {
             background: #0078d4;
             color: #fff;
@@ -110,9 +126,8 @@
         <form id="uploadForm">
             <label for="apiKey">API Key</label>
             <input type="text" id="apiKey" value="0bac0b5f-43c6-59f2-9e6e-2c3c60674f3d" style="width:100%; padding:6px; margin-bottom:12px;">
-            <label for="fileInput">Select Image</label>
+            <label for="fileInput" class="file-label" id="fileLabel">Tap to choose image</label>
             <input type="file" id="fileInput" accept="image/jpeg,image/png">
-            <br>
             <button type="submit">Upload</button>
         </form>
         <div id="status" class="status"></div>
@@ -130,6 +145,18 @@
     <script>
         const uploadForm = document.getElementById("uploadForm");
         const statusEl = document.getElementById("status");
+        const fileLabel = document.getElementById("fileLabel");
+
+        document.getElementById("fileInput").addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileLabel.textContent = file.name;
+                fileLabel.classList.add("has-file");
+            } else {
+                fileLabel.textContent = "Tap to choose image";
+                fileLabel.classList.remove("has-file");
+            }
+        });
 
         const MAX_DIM = 768;
 
