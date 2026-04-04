@@ -3,3 +3,4 @@ gunicorn
 requests
 opencv-python-headless
 numpy
+onnxruntime
