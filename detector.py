@@ -89,12 +89,11 @@ def _postprocess(output, scale):
     indices = cv2.dnn.NMSBoxes(nms_boxes, scores_arr.tolist(), CONF_THRESHOLD, IOU_THRESHOLD)
 
     results = []
-    for i in indices:
-        idx = i if isinstance(i, int) else i[0]
+    for i in np.array(indices).flatten():
         results.append({
-            "box": boxes[idx],
-            "score": scores[idx],
-            "class": VEHICLE_CLASSES[class_ids[idx]],
+            "box": boxes[i],
+            "score": scores[i],
+            "class": VEHICLE_CLASSES[class_ids[i]],
         })
 
     return results
