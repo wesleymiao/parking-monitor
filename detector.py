@@ -11,7 +11,7 @@ import onnxruntime as ort
 
 log = logging.getLogger(__name__)
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8n.onnx")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8s.onnx")
 
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
