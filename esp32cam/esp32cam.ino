@@ -54,7 +54,7 @@ void initCamera() {
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size   = FRAMESIZE_VGA;  // 640x480
   config.jpeg_quality = 12;
-  config.fb_count     = 1;
+  config.fb_count     = 2;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
