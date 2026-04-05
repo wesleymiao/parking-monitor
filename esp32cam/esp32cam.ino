@@ -3,9 +3,9 @@
 #include <HTTPClient.h>
 
 // ---- Your settings ----
-const char* ssid       = "YOUR_WIFI_SSID";
+const char* ssid       = "NoviaNew";
 const char* password   = "YOUR_WIFI_PASSWORD";
-const char* serverUrl  = "https://your-parking-app.azurewebsites.net/upload";
+const char* serverUrl  = "https://parking-monitor-aueha3gchuegehez.japanwest-01.azurewebsites.net/upload";
 const char* apiKey     = "YOUR_API_KEY";
 
 #define UPLOAD_INTERVAL 30000  // 30 seconds
@@ -99,16 +99,23 @@ void sendPhoto() {
     }
   }
 
-  HTTPClient http;
-  http.begin(serverUrl);
-  http.addHeader("Content-Type", "image/jpeg");
-  http.addHeader("X-API-Key", apiKey);
-  http.setTimeout(30000);
+  int responseCode = -1;
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    HTTPClient http;
+    http.begin(serverUrl);
+    http.addHeader("Content-Type", "image/jpeg");
+    http.addHeader("X-API-Key", apiKey);
+    http.setTimeout(60000);
 
-  int responseCode = http.POST(fb->buf, fb->len);
-  Serial.printf("Server responded: %d\n", responseCode);
+    responseCode = http.POST(fb->buf, fb->len);
+    http.end();
 
-  http.end();
+    Serial.printf("Attempt %d: Server responded: %d\n", attempt, responseCode);
+
+    if (responseCode == 200) break;
+    delay(3000);
+  }
+
   esp_camera_fb_return(fb);
 }
 
