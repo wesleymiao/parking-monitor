@@ -30,6 +30,7 @@ DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
 
 log = logging.getLogger(__name__)
 last_daily_notification = None
+previous_had_open = False
 if os.environ.get("WEBSITE_SITE_NAME"):
     # Azure App Service — use persistent storage outside the app directory
     UPLOAD_DIR = "/home/uploads"
@@ -173,7 +174,7 @@ def detect_open_spots(image_path):
 
 def notify_if_changed(result, image_url):
     """Send DingTalk notification when open spots exist, or once daily as heartbeat."""
-    global last_daily_notification
+    global last_daily_notification, previous_had_open
     current_open = result["open"]
     today = datetime.datetime.now(GMT8).date()
 
@@ -184,6 +185,11 @@ def notify_if_changed(result, image_url):
         spots = ", ".join(f"#{s}" for s in current_open)
         title = f"{len(current_open)}/{result['total']} spots open"
         text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
+        previous_had_open = True
+    elif previous_had_open:
+        title = "Parking Update"
+        text = f"### 🅿️ Parking Update\n\n**No open spots.** All {result['total']} spots are now occupied.\n\n![image]({image_url})"
+        previous_had_open = False
     elif needs_heartbeat:
         title = "Parking Daily Status"
         text = f"### 🅿️ Parking Daily Status\n\n**All {result['total']} spots occupied.** Detection is running normally.\n\n![image]({image_url})"
