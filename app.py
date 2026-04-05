@@ -139,6 +139,11 @@ def upload():
     if not data:
         return "Empty image", 400
 
+    # Validate JPEG: must start with FF D8 and end with FF D9
+    if len(data) < 4 or data[:2] != b'\xff\xd8' or data[-2:] != b'\xff\xd9':
+        log.warning(f"Discarded incomplete JPEG ({len(data)} bytes)")
+        return "Incomplete or invalid JPEG", 400
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"parking_{timestamp}.jpg"
     filepath = os.path.join(UPLOAD_DIR, filename)
