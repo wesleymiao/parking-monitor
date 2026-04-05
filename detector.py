@@ -19,7 +19,7 @@ VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 INPUT_SIZE = 640
 CONF_THRESHOLD = 0.1
 IOU_THRESHOLD = 0.45
-OVERLAP_THRESHOLD = 0.15  # fraction of spot area that must be covered by a vehicle
+OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 
 _session = None
 
@@ -159,7 +159,7 @@ def detect(image_path, spots):
         is_occupied = False
         for v in vehicles:
             overlap = _box_overlap(spot_box, v["box"])
-            if overlap >= OVERLAP_THRESHOLD:
+            if overlap > 0:
                 is_occupied = True
                 log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={overlap:.2f})")
                 break
