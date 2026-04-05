@@ -159,12 +159,18 @@ def upload():
     }
     save_metadata(meta)
 
-    log.info(f"Saved {filename} ({len(data)} bytes) from {source}, running detection...")
-    result = detect_open_spots(filepath)
-    log.info(f"Detection result: {result}")
-    labeled = result.get("labeled_image", filename)
-    image_url = f"{request.host_url}images/{labeled}"
-    notify_if_changed(result, image_url)
+    log.info(f"Saved {filename} ({len(data)} bytes) from {source}")
+    hour = datetime.datetime.now(GMT8).hour
+    if 6 <= hour < 18:
+        log.info("Running detection...")
+        result = detect_open_spots(filepath)
+        log.info(f"Detection result: {result}")
+        labeled = result.get("labeled_image", filename)
+        image_url = f"{request.host_url}images/{labeled}"
+        notify_if_changed(result, image_url)
+    else:
+        log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
+        result = {"skipped": True}
 
     return jsonify({"filename": filename, "size": len(data), "detection": result}), 200
 
