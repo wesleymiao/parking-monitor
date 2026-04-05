@@ -61,20 +61,6 @@
         .spot-open { color: green; font-weight: 600; }
         .spot-occupied { color: #888; }
 
-        .latest-section {
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .latest-section img {
-            max-width: 100%;
-            border-radius: 4px;
-            margin-top: 10px;
-        }
-        .latest-section .no-image { color: #888; font-style: italic; }
-
         .gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -130,6 +116,18 @@
             border-radius: 4px;
         }
 
+        .filter-btn {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 4px;
+        }
+        .filter-btn:hover { background: #e0e8f0; }
+        .filter-btn.active { background: #0078d4; color: #fff; border-color: #0078d4; }
+
         .page-btn {
             background: none;
             border: 1px solid #ccc;
@@ -171,12 +169,13 @@
         <div id="detectionResult" class="detection-result"></div>
     </div>
 
-    <div class="latest-section">
-        <h2>Latest Image <button class="refresh-btn" onclick="loadLatest()">Refresh</button></h2>
-        <div id="latestContainer"><span class="no-image">No images yet</span></div>
-    </div>
-
     <h2>All Images <button class="refresh-btn" onclick="loadGallery()">Refresh</button></h2>
+    <div style="margin-bottom:10px;">
+        <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+        <button class="filter-btn" onclick="setFilter('open', this)">Open spots detected</button>
+        <button class="filter-btn" onclick="setFilter('occupied', this)">All spots occupied</button>
+        <button class="filter-btn" onclick="setFilter('original', this)">Original images</button>
+    </div>
     <div id="gallery" class="gallery"></div>
     <div id="pagination" style="margin-top:15px; text-align:center;"></div>
 
@@ -259,7 +258,6 @@
                     statusEl.textContent = `Uploaded: ${data.filename} (${data.size} bytes)`;
                     statusEl.className = "status ok";
                     showDetection(data.detection);
-                    loadLatest();
                     loadGallery();
                 } else {
                     statusEl.textContent = `Error: ${res.status} ${res.statusText}`;
@@ -271,23 +269,15 @@
             }
         });
 
-        async function loadLatest() {
-            const container = document.getElementById("latestContainer");
-            try {
-                const res = await fetch("/images/latest");
-                if (res.ok) {
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    container.innerHTML = `<img src="${url}" alt="Latest parking image">`;
-                } else {
-                    container.innerHTML = '<span class="no-image">No images yet</span>';
-                }
-            } catch {
-                container.innerHTML = '<span class="no-image">Failed to load</span>';
-            }
-        }
-
         let currentPage = 1;
+        let currentFilter = "all";
+
+        function setFilter(filter, btn) {
+            currentFilter = filter;
+            document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            loadGallery(1);
+        }
 
         async function loadGallery(page) {
             page = page || currentPage;
@@ -295,15 +285,25 @@
             const gallery = document.getElementById("gallery");
             const pagination = document.getElementById("pagination");
             try {
-                const res = await fetch(`/images?page=${page}`);
+                const res = await fetch(`/images?page=${page}&filter=${currentFilter}`);
                 const data = await res.json();
-                gallery.innerHTML = data.images.map(img =>
-                    `<div class="gallery-item">
+                gallery.innerHTML = data.images.map(img => {
+                    const isLabeled = img.filename.includes("_labeled");
+                    let meta = "";
+                    if (isLabeled) {
+                        const openCount = (img.open || []).length;
+                        const totalCount = openCount + (img.occupied || []).length;
+                        meta = `${img.model || ""}  &middot; ${openCount}/${totalCount} open`;
+                    } else {
+                        meta = img.source || "";
+                    }
+                    if (img.time) meta += ` &middot; ${img.time}`;
+                    return `<div class="gallery-item">
                         <img src="/images/${img.filename}" alt="${img.filename}" onclick="openLightbox('/images/${img.filename}')">
                         <button class="delete-btn" onclick="deleteImage('${img.filename}')">&times;</button>
-                        <div class="meta">${img.source}${img.time ? ' &middot; ' + img.time : ''}</div>
-                    </div>`
-                ).join("");
+                        <div class="meta">${meta}</div>
+                    </div>`;
+                }).join("");
 
                 if (data.pages > 1) {
                     let btns = "";
@@ -345,7 +345,6 @@
                     headers: { "X-API-Key": apiKey }
                 });
                 if (res.ok) {
-                    loadLatest();
                     loadGallery();
                 } else {
                     alert(`Delete failed: ${res.status}`);
@@ -359,7 +358,6 @@
             document.getElementById("deployTime").textContent = `Last deployed: ${d.deploy_time}`;
         });
 
-        loadLatest();
         loadGallery();
     </script>
 </body>

@@ -200,12 +200,27 @@ def upload():
         import time
         log.info("Running detection...")
         t0 = time.time()
-        result = detect_open_spots(filepath, settings.get("model", "yolov8l"))
+        model_name = settings.get("model", "yolov8l")
+        result = detect_open_spots(filepath, model_name)
         inference_ms = int((time.time() - t0) * 1000)
         log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
         labeled = result.get("labeled_image", filename)
         image_url = f"{request.host_url}images/{labeled}"
         notify_if_changed(result, image_url)
+        # Store detection info in metadata
+        meta = load_metadata()
+        meta[filename]["model"] = model_name
+        meta[filename]["open"] = result.get("open", [])
+        meta[filename]["occupied"] = result.get("occupied", [])
+        if labeled != filename:
+            meta[labeled] = {
+                "source": "Labeled",
+                "model": model_name,
+                "open": result.get("open", []),
+                "occupied": result.get("occupied", []),
+                "time": meta[filename]["time"],
+            }
+        save_metadata(meta)
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
         result = {"skipped": True}
@@ -280,22 +295,49 @@ def send_dingtalk(title, text):
 def list_images():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 100, type=int)
+    filter_type = request.args.get("filter", "all")
 
     files = sorted(os.listdir(UPLOAD_DIR), reverse=True)
     images = [f for f in files if f.endswith(".jpg")]
-    total = len(images)
-    start = (page - 1) * per_page
-    page_images = images[start:start + per_page]
-
     meta = load_metadata()
+
+    # Apply filter
+    filtered = []
+    for name in images:
+        is_labeled = "_labeled" in name
+        info = meta.get(name, {})
+        if not info:
+            original = name.replace("_labeled", "")
+            info = meta.get(original, {})
+        has_open = len(info.get("open", [])) > 0
+        has_occupied = len(info.get("occupied", [])) > 0
+
+        if filter_type == "open" and not (is_labeled and has_open):
+            continue
+        elif filter_type == "occupied" and not (is_labeled and not has_open and has_occupied):
+            continue
+        elif filter_type == "original" and is_labeled:
+            continue
+
+        filtered.append(name)
+
+    total = len(filtered)
+    start = (page - 1) * per_page
+    page_images = filtered[start:start + per_page]
+
     result = []
     for name in page_images:
         is_labeled = "_labeled" in name
-        original = name.replace("_labeled", "")
-        info = meta.get(original, {})
+        info = meta.get(name, {})
+        if not info:
+            original = name.replace("_labeled", "")
+            info = meta.get(original, {})
         result.append({
             "filename": name,
-            "source": "Labeled" if is_labeled else info.get("source", "Unknown"),
+            "source": info.get("source", "Labeled" if is_labeled else "Unknown"),
+            "model": info.get("model", ""),
+            "open": info.get("open", []),
+            "occupied": info.get("occupied", []),
             "time": info.get("time", ""),
         })
     return jsonify({"images": result, "page": page, "total": total, "pages": (total + per_page - 1) // per_page})
