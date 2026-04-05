@@ -5,7 +5,7 @@ import datetime
 import logging
 import requests as http_requests
 from flask import Flask, request, abort, send_from_directory, jsonify
-from detector import detect as detect_vehicles
+from detector import detect as detect_vehicles, get_available_models, get_current_model
 
 import sys
 
@@ -61,7 +61,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8l"}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
@@ -128,9 +128,14 @@ def config_settings():
         settings = load_settings()
         settings["detect_start"] = request.json.get("detect_start", settings["detect_start"])
         settings["detect_end"] = request.json.get("detect_end", settings["detect_end"])
+        if "model" in request.json:
+            settings["model"] = request.json["model"]
         save_settings(settings)
         return jsonify(settings), 200
-    return jsonify(load_settings())
+    settings = load_settings()
+    settings["available_models"] = get_available_models()
+    settings["current_model"] = get_current_model()
+    return jsonify(settings)
 
 
 @app.route("/config/spots", methods=["GET", "POST"])
@@ -195,7 +200,7 @@ def upload():
         import time
         log.info("Running detection...")
         t0 = time.time()
-        result = detect_open_spots(filepath)
+        result = detect_open_spots(filepath, settings.get("model", "yolov8l"))
         inference_ms = int((time.time() - t0) * 1000)
         log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
         labeled = result.get("labeled_image", filename)
@@ -208,12 +213,12 @@ def upload():
     return jsonify({"filename": filename, "size": len(data), "detection": result}), 200
 
 
-def detect_open_spots(image_path):
+def detect_open_spots(image_path, model_name="yolov8l"):
     spots = load_spots()
     if not spots:
         log.warning("Detection not calibrated — no spots defined")
         return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
-    return detect_vehicles(image_path, spots)
+    return detect_vehicles(image_path, spots, model_name=model_name)
 
 
 def notify_if_changed(result, image_url):

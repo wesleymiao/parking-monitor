@@ -142,8 +142,13 @@
             <select id="detectStart"></select>
             <label>To</label>
             <select id="detectEnd"></select>
-            <button class="btn" onclick="saveSchedule()">Save</button>
         </div>
+        <h2>Model</h2>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <select id="modelSelect" style="padding:6px;"></select>
+            <span id="modelInfo" style="color:#888; font-size:13px;"></span>
+        </div>
+        <button class="btn" onclick="saveSchedule()">Save Settings</button>
         <span id="scheduleStatus" class="status"></span>
     </div>
 
@@ -351,12 +356,21 @@
             endSel.innerHTML += `<option value="${h}">${label}</option>`;
         }
 
+        const modelSel = document.getElementById("modelSelect");
+        const modelInfo = document.getElementById("modelInfo");
+        const modelSizes = { yolov8n: "6MB", yolov8s: "43MB", yolov8m: "100MB", yolov8l: "167MB" };
+
         async function loadSchedule() {
             const res = await fetch("/config/settings");
             if (res.ok) {
                 const s = await res.json();
                 startSel.value = s.detect_start;
                 endSel.value = s.detect_end;
+                modelSel.innerHTML = "";
+                (s.available_models || []).forEach(m => {
+                    modelSel.innerHTML += `<option value="${m}" ${m === s.model ? "selected" : ""}>${m} (${modelSizes[m] || ""})</option>`;
+                });
+                modelInfo.textContent = `Active: ${s.current_model}`;
             }
         }
 
@@ -369,6 +383,7 @@
                 body: JSON.stringify({
                     detect_start: parseInt(startSel.value),
                     detect_end: parseInt(endSel.value),
+                    model: modelSel.value,
                     api_key: apiKey
                 })
             });

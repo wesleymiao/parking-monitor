@@ -16,8 +16,14 @@ if os.environ.get("WEBSITE_SITE_NAME"):
     MODEL_DIR = "/home/model"
 else:
     MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
-MODEL_PATH = os.path.join(MODEL_DIR, "yolov8l.onnx")
-MODEL_URL = "https://parkingyolomodels.blob.core.windows.net/models/yolov8l.onnx"
+
+BLOB_BASE = "https://parkingyolomodels.blob.core.windows.net/models"
+AVAILABLE_MODELS = {
+    "yolov8n": f"{BLOB_BASE}/yolov8n.onnx",
+    "yolov8s": f"{BLOB_BASE}/yolov8s.onnx",
+    "yolov8m": f"{BLOB_BASE}/yolov8m.onnx",
+    "yolov8l": f"{BLOB_BASE}/yolov8l.onnx",
+}
 
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -28,28 +34,42 @@ IOU_THRESHOLD = 0.45
 OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 
 _session = None
+_current_model = None
 
 
-def _download_model():
+def _download_model(model_name):
     os.makedirs(MODEL_DIR, exist_ok=True)
-    if os.path.isfile(MODEL_PATH):
-        return
-    log.info(f"Downloading model from {MODEL_URL}...")
-    resp = dl_requests.get(MODEL_URL, stream=True, timeout=300)
+    model_path = os.path.join(MODEL_DIR, f"{model_name}.onnx")
+    if os.path.isfile(model_path):
+        return model_path
+    url = AVAILABLE_MODELS[model_name]
+    log.info(f"Downloading {model_name} from {url}...")
+    resp = dl_requests.get(url, stream=True, timeout=300)
     resp.raise_for_status()
-    with open(MODEL_PATH + ".tmp", "wb") as f:
+    with open(model_path + ".tmp", "wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
             f.write(chunk)
-    os.rename(MODEL_PATH + ".tmp", MODEL_PATH)
-    log.info(f"Model saved ({os.path.getsize(MODEL_PATH)} bytes)")
+    os.rename(model_path + ".tmp", model_path)
+    log.info(f"Model saved ({os.path.getsize(model_path)} bytes)")
+    return model_path
 
 
-def _get_session():
-    global _session
-    if _session is None:
-        _download_model()
-        _session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
+def _get_session(model_name="yolov8l"):
+    global _session, _current_model
+    if _session is None or _current_model != model_name:
+        model_path = _download_model(model_name)
+        _session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        _current_model = model_name
+        log.info(f"Loaded model: {model_name}")
     return _session
+
+
+def get_current_model():
+    return _current_model or "yolov8l"
+
+
+def get_available_models():
+    return list(AVAILABLE_MODELS.keys())
 
 
 def _preprocess(img):
@@ -141,13 +161,14 @@ def _box_overlap(spot_box, vehicle_box):
     return intersection / spot_area
 
 
-def detect(image_path, spots):
+def detect(image_path, spots, model_name=None):
     """
-    Detect open/occupied parking spots using YOLOv8s.
+    Detect open/occupied parking spots.
 
     Args:
         image_path: path to the image file
         spots: list of spot dicts with id, x, y, w, h (normalized 0-1)
+        model_name: which YOLO model to use (default from settings)
 
     Returns:
         dict with total, open, occupied lists and vehicle detections
@@ -157,7 +178,7 @@ def detect(image_path, spots):
         return {"total": 0, "open": [], "occupied": [], "error": "cannot read image"}
 
     h, w = img.shape[:2]
-    session = _get_session()
+    session = _get_session(model_name or "yolov8l")
 
     # Run YOLO inference
     blob, scale, _, _ = _preprocess(img)
