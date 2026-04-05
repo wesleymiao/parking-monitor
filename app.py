@@ -7,10 +7,20 @@ import requests as http_requests
 from flask import Flask, request, abort, send_from_directory, jsonify
 from detector import detect as detect_vehicles
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+import sys
+
+log_format = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.setLevel(logging.INFO)
+stdout_handler.addFilter(lambda r: r.levelno < logging.ERROR)
+stdout_handler.setFormatter(logging.Formatter(log_format))
+
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(logging.ERROR)
+stderr_handler.setFormatter(logging.Formatter(log_format))
+
+logging.basicConfig(level=logging.INFO, handlers=[stdout_handler, stderr_handler])
 
 app = Flask(__name__)
 
