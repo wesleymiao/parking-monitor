@@ -43,6 +43,7 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "spots.json")
 REFERENCE_FILE = os.path.join(CONFIG_DIR, "reference.jpg")
 METADATA_FILE = os.path.join(CONFIG_DIR, "metadata.json")
+SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 GMT8 = datetime.timezone(datetime.timedelta(hours=8))
 DEPLOY_TIME = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -57,6 +58,20 @@ def load_metadata():
 def save_metadata(meta):
     with open(METADATA_FILE, "w") as f:
         json.dump(meta, f)
+
+
+def load_settings():
+    defaults = {"detect_start": 6, "detect_end": 18}
+    if os.path.isfile(SETTINGS_FILE):
+        with open(SETTINGS_FILE) as f:
+            saved = json.load(f)
+            defaults.update(saved)
+    return defaults
+
+
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f)
 
 
 def load_spots():
@@ -102,6 +117,20 @@ def config_reference():
     if not os.path.isfile(REFERENCE_FILE):
         return "No reference image", 404
     return send_from_directory(CONFIG_DIR, "reference.jpg")
+
+
+@app.route("/config/settings", methods=["GET", "POST"])
+def config_settings():
+    if request.method == "POST":
+        key = request.headers.get("X-API-Key") or (request.json.get("api_key") if request.is_json else request.form.get("api_key"))
+        if key != API_KEY:
+            abort(401)
+        settings = load_settings()
+        settings["detect_start"] = request.json.get("detect_start", settings["detect_start"])
+        settings["detect_end"] = request.json.get("detect_end", settings["detect_end"])
+        save_settings(settings)
+        return jsonify(settings), 200
+    return jsonify(load_settings())
 
 
 @app.route("/config/spots", methods=["GET", "POST"])
@@ -160,11 +189,15 @@ def upload():
     save_metadata(meta)
 
     log.info(f"Saved {filename} ({len(data)} bytes) from {source}")
+    settings = load_settings()
     hour = datetime.datetime.now(GMT8).hour
-    if 6 <= hour < 18:
+    if settings["detect_start"] <= hour < settings["detect_end"]:
+        import time
         log.info("Running detection...")
+        t0 = time.time()
         result = detect_open_spots(filepath)
-        log.info(f"Detection result: {result}")
+        inference_ms = int((time.time() - t0) * 1000)
+        log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
         labeled = result.get("labeled_image", filename)
         image_url = f"{request.host_url}images/{labeled}"
         notify_if_changed(result, image_url)

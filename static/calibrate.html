@@ -135,6 +135,18 @@
         <span id="saveStatus" class="status"></span>
     </div>
 
+    <div class="section">
+        <h2>Detection Schedule (Beijing Time)</h2>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <label>From</label>
+            <select id="detectStart"></select>
+            <label>To</label>
+            <select id="detectEnd"></select>
+            <button class="btn" onclick="saveSchedule()">Save</button>
+        </div>
+        <span id="scheduleStatus" class="status"></span>
+    </div>
+
     <script>
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
@@ -330,9 +342,49 @@
             }
         }
 
+        // Schedule controls
+        const startSel = document.getElementById("detectStart");
+        const endSel = document.getElementById("detectEnd");
+        for (let h = 0; h < 24; h++) {
+            const label = `${h.toString().padStart(2, "0")}:00`;
+            startSel.innerHTML += `<option value="${h}">${label}</option>`;
+            endSel.innerHTML += `<option value="${h}">${label}</option>`;
+        }
+
+        async function loadSchedule() {
+            const res = await fetch("/config/settings");
+            if (res.ok) {
+                const s = await res.json();
+                startSel.value = s.detect_start;
+                endSel.value = s.detect_end;
+            }
+        }
+
+        async function saveSchedule() {
+            const apiKey = document.getElementById("apiKey").value;
+            const status = document.getElementById("scheduleStatus");
+            const res = await fetch("/config/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+                body: JSON.stringify({
+                    detect_start: parseInt(startSel.value),
+                    detect_end: parseInt(endSel.value),
+                    api_key: apiKey
+                })
+            });
+            if (res.ok) {
+                status.textContent = "Schedule saved!";
+                status.className = "status ok";
+            } else {
+                status.textContent = `Error: ${res.status}`;
+                status.className = "status err";
+            }
+        }
+
         // Load existing config on page load
         loadReference();
         loadSpots();
+        loadSchedule();
     </script>
 </body>
 </html>
