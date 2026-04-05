@@ -172,16 +172,16 @@ def detect_open_spots(image_path):
 
 
 def notify_if_changed(result, image_url):
-    """Send DingTalk notification for every upload."""
+    """Send DingTalk notification only when there are open spots."""
     current_open = result["open"]
 
     if not current_open:
-        title = "Parking Update"
-        text = f"### 🅿️ Parking Update\n\n**No open spots.**\n\n![image]({image_url})"
-    else:
-        spots = ", ".join(f"#{s}" for s in current_open)
-        title = f"{len(current_open)}/{result['total']} spots open"
-        text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
+        log.info("No open spots, skipping notification")
+        return
+
+    spots = ", ".join(f"#{s}" for s in current_open)
+    title = f"{len(current_open)}/{result['total']} spots open"
+    text = f"### 🅿️ Parking Update\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
 
     log.info(f"Notification: {title}")
     send_dingtalk(title, text)
