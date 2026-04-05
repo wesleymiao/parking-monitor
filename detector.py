@@ -12,7 +12,10 @@ import requests as dl_requests
 
 log = logging.getLogger(__name__)
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
+if os.environ.get("WEBSITE_SITE_NAME"):
+    MODEL_DIR = "/home/model"
+else:
+    MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "yolov8l.onnx")
 MODEL_URL = "https://parkingyolomodels.blob.core.windows.net/models/yolov8l.onnx"
 
