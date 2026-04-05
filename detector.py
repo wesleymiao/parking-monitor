@@ -8,10 +8,13 @@ import logging
 import numpy as np
 import cv2
 import onnxruntime as ort
+import requests as dl_requests
 
 log = logging.getLogger(__name__)
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "yolov8m.onnx")
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
+MODEL_PATH = os.path.join(MODEL_DIR, "yolov8l.onnx")
+MODEL_URL = "https://parkingyolomodels.blob.core.windows.net/models/yolov8l.onnx"
 
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -24,9 +27,24 @@ OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 _session = None
 
 
+def _download_model():
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    if os.path.isfile(MODEL_PATH):
+        return
+    log.info(f"Downloading model from {MODEL_URL}...")
+    resp = dl_requests.get(MODEL_URL, stream=True, timeout=300)
+    resp.raise_for_status()
+    with open(MODEL_PATH + ".tmp", "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    os.rename(MODEL_PATH + ".tmp", MODEL_PATH)
+    log.info(f"Model saved ({os.path.getsize(MODEL_PATH)} bytes)")
+
+
 def _get_session():
     global _session
     if _session is None:
+        _download_model()
         _session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
     return _session
 
