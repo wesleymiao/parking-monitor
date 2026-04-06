@@ -367,6 +367,10 @@ def list_images():
         has_occupied = len(info.get("occupied", [])) > 0
         img_time = info.get("time", "")
 
+        # Skip images without metadata when filtering
+        if filter_type != "all" and not info:
+            continue
+
         # Time range filter
         if time_from and img_time and img_time < time_from:
             continue
