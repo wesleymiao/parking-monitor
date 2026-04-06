@@ -26,7 +26,7 @@ AVAILABLE_MODELS = {
 }
 
 # COCO classes that are vehicles
-VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck", 8: "boat"}
 
 COCO_CLASSES = {
     0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane",
