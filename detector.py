@@ -223,7 +223,6 @@ def detect(image_path, spots, model_name=None, confidence=None):
     blob, scale, _, _ = _preprocess(img)
     output = session.run(None, {input_name: blob})
     vehicles = _postprocess(output[0], scale, conf)
-    all_objects = _postprocess(output[0], scale, conf, vehicle_only=False)
 
     log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 
@@ -254,17 +253,12 @@ def detect(image_path, spots, model_name=None, confidence=None):
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
     _draw_labels(img, spots, vehicles, open_spots, occupied_spots, labeled_path)
 
-    # Draw debug image with ALL detected objects
-    debug_path = image_path.replace(".jpg", "_debug.jpg")
-    _draw_debug(img, all_objects, debug_path)
-
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
         "vehicles": len(vehicles),
         "labeled_image": os.path.basename(labeled_path),
-        "debug_image": os.path.basename(debug_path),
     }
 
 
