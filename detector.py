@@ -28,6 +28,26 @@ AVAILABLE_MODELS = {
 # COCO classes that are vehicles
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
+COCO_CLASSES = {
+    0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane",
+    5: "bus", 6: "train", 7: "truck", 8: "boat", 9: "traffic light",
+    10: "fire hydrant", 11: "stop sign", 12: "parking meter", 13: "bench",
+    14: "bird", 15: "cat", 16: "dog", 17: "horse", 18: "sheep", 19: "cow",
+    20: "elephant", 21: "bear", 22: "zebra", 23: "giraffe", 24: "backpack",
+    25: "umbrella", 26: "handbag", 27: "tie", 28: "suitcase", 29: "frisbee",
+    30: "skis", 31: "snowboard", 32: "sports ball", 33: "kite", 34: "baseball bat",
+    35: "baseball glove", 36: "skateboard", 37: "surfboard", 38: "tennis racket",
+    39: "bottle", 40: "wine glass", 41: "cup", 42: "fork", 43: "knife",
+    44: "spoon", 45: "bowl", 46: "banana", 47: "apple", 48: "sandwich",
+    49: "orange", 50: "broccoli", 51: "carrot", 52: "hot dog", 53: "pizza",
+    54: "donut", 55: "cake", 56: "chair", 57: "couch", 58: "potted plant",
+    59: "bed", 60: "dining table", 61: "toilet", 62: "tv", 63: "laptop",
+    64: "mouse", 65: "remote", 66: "keyboard", 67: "cell phone", 68: "microwave",
+    69: "oven", 70: "toaster", 71: "sink", 72: "refrigerator", 73: "book",
+    74: "clock", 75: "vase", 76: "scissors", 77: "teddy bear", 78: "hair drier",
+    79: "toothbrush",
+}
+
 INPUT_SIZE = 640
 CONF_THRESHOLD = 0.1
 IOU_THRESHOLD = 0.45
@@ -90,8 +110,8 @@ def _preprocess(img):
     return blob, scale, 0, 0  # scale, pad_x, pad_y
 
 
-def _postprocess(output, scale, conf_threshold=CONF_THRESHOLD):
-    """Extract vehicle detections from YOLOv8 output."""
+def _postprocess(output, scale, conf_threshold=CONF_THRESHOLD, vehicle_only=True):
+    """Extract detections from YOLOv8 output."""
     # output shape: [1, 84, 8400] -> transpose to [8400, 84]
     predictions = output[0].transpose()
 
@@ -107,7 +127,7 @@ def _postprocess(output, scale, conf_threshold=CONF_THRESHOLD):
 
         if confidence < conf_threshold:
             continue
-        if class_id not in VEHICLE_CLASSES:
+        if vehicle_only and class_id not in VEHICLE_CLASSES:
             continue
 
         # Convert from center to corner format, scale back to original
@@ -130,12 +150,13 @@ def _postprocess(output, scale, conf_threshold=CONF_THRESHOLD):
     nms_boxes = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in boxes]
     indices = cv2.dnn.NMSBoxes(nms_boxes, scores_arr.tolist(), conf_threshold, IOU_THRESHOLD)
 
+    class_map = VEHICLE_CLASSES if vehicle_only else COCO_CLASSES
     results = []
     for i in np.array(indices).flatten():
         results.append({
             "box": boxes[i],
             "score": scores[i],
-            "class": VEHICLE_CLASSES[class_ids[i]],
+            "class": class_map.get(class_ids[i], f"class_{class_ids[i]}"),
         })
 
     return results
@@ -265,6 +286,13 @@ def detect(image_path, spots, model_name=None, confidence=None):
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
     _draw_labels(best_variant_img, spots, unique_vehicles, open_spots, occupied_spots, labeled_path, best_variant_name)
 
+    # Draw debug image with ALL detected objects
+    debug_path = image_path.replace(".jpg", "_debug.jpg")
+    blob_debug, scale_debug, _, _ = _preprocess(best_variant_img)
+    output_debug = session.run(None, {input_name: blob_debug})
+    all_objects = _postprocess(output_debug[0], scale_debug, conf, vehicle_only=False)
+    _draw_debug(best_variant_img, all_objects, debug_path, best_variant_name)
+
     return {
         "total": len(spots),
         "open": sorted(open_spots),
@@ -272,7 +300,32 @@ def detect(image_path, spots, model_name=None, confidence=None):
         "vehicles": len(unique_vehicles),
         "variant": best_variant_name,
         "labeled_image": os.path.basename(labeled_path),
+        "debug_image": os.path.basename(debug_path),
     }
+
+
+def _draw_debug(img, objects, output_path, variant_name=""):
+    """Draw ALL detected objects for debugging."""
+    labeled = img.copy()
+    colors = {}
+    for obj in objects:
+        cls = obj["class"]
+        if cls not in colors:
+            h = hash(cls) % 180
+            colors[cls] = (int(50 + h * 0.8), int(100 + (h * 3) % 155), int(200 - h % 150))
+        color = colors[cls]
+        x1, y1, x2, y2 = [int(c) for c in obj["box"]]
+        cv2.rectangle(labeled, (x1, y1), (x2, y2), color, 2)
+        label = f"{cls} {obj['score']:.0%}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(labeled, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
+        cv2.putText(labeled, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    if variant_name:
+        cv2.putText(labeled, f"DEBUG: {variant_name} ({len(objects)} objects)", (8, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+    cv2.imwrite(output_path, labeled)
 
 
 def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path, variant_name=""):
