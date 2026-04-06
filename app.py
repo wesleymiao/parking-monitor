@@ -292,7 +292,9 @@ def notify_if_changed(result, image_url):
     """Send DingTalk notification on state change or daily summary."""
     global last_daily_notification, previous_had_open
     current_open = result["open"]
-    today = datetime.datetime.now(GMT8).date()
+    now = datetime.datetime.now(GMT8)
+    today = now.date()
+    time_str = now.strftime("%H:%M:%S")
     has_open = len(current_open) > 0
     state_changed = has_open != previous_had_open
     needs_daily = last_daily_notification != today
@@ -301,22 +303,22 @@ def notify_if_changed(result, image_url):
         # Transition: no open -> some open
         spots = ", ".join(f"#{s}" for s in current_open)
         title = f"Spots available! {len(current_open)}/{result['total']}"
-        text = f"### 🅿️ Spots Available!\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
+        text = f"### 🅿️ Spots Available!\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n{time_str}\n\n![image]({image_url})"
         previous_had_open = True
     elif state_changed and not has_open:
         # Transition: some open -> no open
         title = "All spots taken"
-        text = f"### 🅿️ All Spots Taken\n\n**All {result['total']} spots are now occupied.**\n\n![image]({image_url})"
+        text = f"### 🅿️ All Spots Taken\n\n**All {result['total']} spots are now occupied.**\n\n{time_str}\n\n![image]({image_url})"
         previous_had_open = False
     elif needs_daily:
         # Daily summary
         if has_open:
             spots = ", ".join(f"#{s}" for s in current_open)
             title = f"Daily: {len(current_open)}/{result['total']} open"
-            text = f"### 🅿️ Daily Summary\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n![image]({image_url})"
+            text = f"### 🅿️ Daily Summary\n\n**{len(current_open)}/{result['total']}** spots open: {spots}\n\n{time_str}\n\n![image]({image_url})"
         else:
             title = "Daily: all spots occupied"
-            text = f"### 🅿️ Daily Summary\n\n**All {result['total']} spots occupied.** Detection is running normally.\n\n![image]({image_url})"
+            text = f"### 🅿️ Daily Summary\n\n**All {result['total']} spots occupied.** Detection is running normally.\n\n{time_str}\n\n![image]({image_url})"
     else:
         log.info("No state change, skipping notification")
         return
