@@ -348,6 +348,8 @@ def list_images():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 100, type=int)
     filter_type = request.args.get("filter", "all")
+    time_from = request.args.get("from", "")
+    time_to = request.args.get("to", "")
 
     files = sorted(os.listdir(UPLOAD_DIR), reverse=True)
     images = [f for f in files if f.endswith(".jpg")]
@@ -363,6 +365,13 @@ def list_images():
             info = meta.get(original, {})
         has_open = len(info.get("open", [])) > 0
         has_occupied = len(info.get("occupied", [])) > 0
+        img_time = info.get("time", "")
+
+        # Time range filter
+        if time_from and img_time and img_time < time_from:
+            continue
+        if time_to and img_time and img_time > time_to:
+            continue
 
         if filter_type == "open" and not (is_labeled and has_open):
             continue
