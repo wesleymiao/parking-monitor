@@ -181,38 +181,43 @@ def detect(image_path, spots, model_name=None, confidence=None):
     h, w = img.shape[:2]
     session = _get_session(model_name or "yolov8l")
 
-    # Run YOLO inference
+    # Run YOLO inference 3 times, union of occupied results
     blob, scale, _, _ = _preprocess(img)
     input_name = session.get_inputs()[0].name
-    output = session.run(None, {input_name: blob})
     conf = confidence if confidence is not None else CONF_THRESHOLD
-    vehicles = _postprocess(output[0], scale, conf)
 
-    log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+    all_vehicles = []
+    ever_occupied = set()
+
+    for run in range(3):
+        output = session.run(None, {input_name: blob})
+        vehicles = _postprocess(output[0], scale, conf)
+        all_vehicles = vehicles  # keep last run for drawing
+        log.info(f"Run {run+1}: detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+
+        for spot in spots:
+            sx1 = spot["x"] * w
+            sy1 = spot["y"] * h
+            sx2 = sx1 + spot["w"] * w
+            sy2 = sy1 + spot["h"] * h
+            spot_box = [sx1, sy1, sx2, sy2]
+
+            for v in vehicles:
+                if _box_overlap(spot_box, v["box"]) > 0:
+                    ever_occupied.add(spot["id"])
+                    break
 
     open_spots = []
     occupied_spots = []
-
     for spot in spots:
-        sx1 = spot["x"] * w
-        sy1 = spot["y"] * h
-        sx2 = sx1 + spot["w"] * w
-        sy2 = sy1 + spot["h"] * h
-        spot_box = [sx1, sy1, sx2, sy2]
-
-        is_occupied = False
-        for v in vehicles:
-            overlap = _box_overlap(spot_box, v["box"])
-            if overlap > 0:
-                is_occupied = True
-                log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={overlap:.2f})")
-                break
-
-        if is_occupied:
+        if spot["id"] in ever_occupied:
             occupied_spots.append(spot["id"])
+            log.info(f"Spot {spot['id']}: occupied")
         else:
             open_spots.append(spot["id"])
             log.info(f"Spot {spot['id']}: open")
+
+    vehicles = all_vehicles
 
     # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
