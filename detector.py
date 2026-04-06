@@ -161,6 +161,20 @@ def _box_overlap(spot_box, vehicle_box):
     return intersection / spot_area
 
 
+def _box_overlap_iou(box_a, box_b):
+    """Compute IoU between two boxes."""
+    ax1, ay1, ax2, ay2 = box_a
+    bx1, by1, bx2, by2 = box_b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    if ix1 >= ix2 or iy1 >= iy2:
+        return 0.0
+    intersection = (ix2 - ix1) * (iy2 - iy1)
+    area_a = (ax2 - ax1) * (ay2 - ay1)
+    area_b = (bx2 - bx1) * (by2 - by1)
+    return intersection / (area_a + area_b - intersection)
+
+
 def detect(image_path, spots, model_name=None, confidence=None):
     """
     Detect open/occupied parking spots.
@@ -181,18 +195,24 @@ def detect(image_path, spots, model_name=None, confidence=None):
     h, w = img.shape[:2]
     session = _get_session(model_name or "yolov8l")
 
-    # Run YOLO inference 3 times, union of occupied results
-    blob, scale, _, _ = _preprocess(img)
+    # Run YOLO inference 3 times with image variations, union of occupied results
     input_name = session.get_inputs()[0].name
     conf = confidence if confidence is not None else CONF_THRESHOLD
+
+    variants = [
+        img,                                                          # original
+        cv2.convertScaleAbs(img, alpha=1.2, beta=20),                 # brighter
+        cv2.convertScaleAbs(img, alpha=1.3, beta=-10),                # higher contrast
+    ]
 
     all_vehicles = []
     ever_occupied = set()
 
-    for run in range(3):
+    for run, variant in enumerate(variants):
+        blob, scale, _, _ = _preprocess(variant)
         output = session.run(None, {input_name: blob})
         vehicles = _postprocess(output[0], scale, conf)
-        all_vehicles = vehicles  # keep last run for drawing
+        all_vehicles.extend(vehicles)
         log.info(f"Run {run+1}: detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 
         for spot in spots:
@@ -217,17 +237,28 @@ def detect(image_path, spots, model_name=None, confidence=None):
             open_spots.append(spot["id"])
             log.info(f"Spot {spot['id']}: open")
 
-    vehicles = all_vehicles
+    # Deduplicate vehicles for drawing (keep highest score per overlapping box)
+    unique_vehicles = []
+    for v in all_vehicles:
+        is_dup = False
+        for u in unique_vehicles:
+            if _box_overlap_iou(v["box"], u["box"]) > 0.5:
+                if v["score"] > u["score"]:
+                    u.update(v)
+                is_dup = True
+                break
+        if not is_dup:
+            unique_vehicles.append(v)
 
     # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
-    _draw_labels(img, spots, vehicles, open_spots, occupied_spots, labeled_path)
+    _draw_labels(img, spots, unique_vehicles, open_spots, occupied_spots, labeled_path)
 
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
-        "vehicles": len(vehicles),
+        "vehicles": len(unique_vehicles),
         "labeled_image": os.path.basename(labeled_path),
     }
 
