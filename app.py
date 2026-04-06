@@ -44,6 +44,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "spots.json")
 REFERENCE_FILE = os.path.join(CONFIG_DIR, "reference.jpg")
 METADATA_FILE = os.path.join(CONFIG_DIR, "metadata.json")
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
+TIMELINE_FILE = os.path.join(CONFIG_DIR, "timeline.json")
 GMT8 = datetime.timezone(datetime.timedelta(hours=8))
 DEPLOY_TIME = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -72,6 +73,28 @@ def load_settings():
 def save_settings(settings):
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f)
+
+
+def load_timeline():
+    if os.path.isfile(TIMELINE_FILE):
+        with open(TIMELINE_FILE) as f:
+            return json.load(f)
+    return []
+
+
+def save_timeline(timeline):
+    with open(TIMELINE_FILE, "w") as f:
+        json.dump(timeline, f)
+
+
+def append_timeline(status, time_str):
+    """Append a detection event. Keep last 3 days only."""
+    timeline = load_timeline()
+    timeline.append({"status": status, "time": time_str})
+    # Prune entries older than 3 days
+    cutoff = (datetime.datetime.now(GMT8) - datetime.timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
+    timeline = [e for e in timeline if e["time"] >= cutoff]
+    save_timeline(timeline)
 
 
 def load_spots():
@@ -140,6 +163,27 @@ def config_settings():
     return jsonify(settings)
 
 
+@app.route("/timeline")
+def timeline():
+    """Return timeline segments for the past 3 days."""
+    events = load_timeline()
+    if not events:
+        return jsonify([])
+
+    # Group consecutive same-status events into segments
+    segments = []
+    current = {"status": events[0]["status"], "start": events[0]["time"], "end": events[0]["time"], "count": 1}
+    for e in events[1:]:
+        if e["status"] == current["status"]:
+            current["end"] = e["time"]
+            current["count"] += 1
+        else:
+            segments.append(current)
+            current = {"status": e["status"], "start": e["time"], "end": e["time"], "count": 1}
+    segments.append(current)
+    return jsonify(segments)
+
+
 @app.route("/config/spots", methods=["GET", "POST"])
 def config_spots():
     if request.method == "POST":
@@ -180,55 +224,60 @@ def upload():
         log.warning(f"Discarded incomplete JPEG ({len(data)} bytes)")
         return "Incomplete or invalid JPEG", 400
 
+    import time as time_mod
+    now_str = datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"parking_{timestamp}.jpg"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    with open(filepath, "wb") as f:
+    source = "ESP32-CAM" if request.content_type == "image/jpeg" else "Web"
+
+    # Save temp file for detection
+    temp_filename = f"parking_{timestamp}.jpg"
+    temp_filepath = os.path.join(UPLOAD_DIR, temp_filename)
+    with open(temp_filepath, "wb") as f:
         f.write(data)
 
-    meta = load_metadata()
-    source = "ESP32-CAM" if request.content_type == "image/jpeg" else "Web"
-    meta[filename] = {
-        "source": source,
-        "ip": request.remote_addr,
-        "time": datetime.datetime.now(GMT8).strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    save_metadata(meta)
-
-    log.info(f"Saved {filename} ({len(data)} bytes) from {source}")
+    log.info(f"Received {temp_filename} ({len(data)} bytes) from {source}")
     settings = load_settings()
     hour = datetime.datetime.now(GMT8).hour
     if settings["detect_start"] <= hour < settings["detect_end"]:
-        import time
         log.info("Running detection...")
-        t0 = time.time()
+        t0 = time_mod.time()
         model_name = settings.get("model", "yolov8l")
         confidence = settings.get("confidence", 0.1)
-        result = detect_open_spots(filepath, model_name, confidence)
-        inference_ms = int((time.time() - t0) * 1000)
+        result = detect_open_spots(temp_filepath, model_name, confidence)
+        inference_ms = int((time_mod.time() - t0) * 1000)
         log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
-        labeled = result.get("labeled_image", filename)
+
+        labeled = result.get("labeled_image", temp_filename)
         image_url = f"{request.host_url}images/{labeled}"
         notify_if_changed(result, image_url)
-        # Store detection info in metadata
+
+        # Store metadata for labeled image
         meta = load_metadata()
-        meta[filename]["model"] = model_name
-        meta[filename]["open"] = result.get("open", [])
-        meta[filename]["occupied"] = result.get("occupied", [])
-        if labeled != filename:
-            meta[labeled] = {
-                "source": "Labeled",
-                "model": model_name,
-                "open": result.get("open", []),
-                "occupied": result.get("occupied", []),
-                "time": meta[filename]["time"],
-            }
+        meta[labeled] = {
+            "source": source,
+            "model": model_name,
+            "open": result.get("open", []),
+            "occupied": result.get("occupied", []),
+            "time": now_str,
+        }
         save_metadata(meta)
+
+        # Record timeline
+        has_open = len(result.get("open", [])) > 0
+        append_timeline("open" if has_open else "occupied", now_str)
+
+        # Remove original image, keep only labeled
+        if labeled != temp_filename and os.path.isfile(temp_filepath):
+            os.remove(temp_filepath)
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
         result = {"skipped": True}
+        append_timeline("not_monitored", now_str)
+        # Remove temp file since no detection
+        if os.path.isfile(temp_filepath):
+            os.remove(temp_filepath)
 
-    return jsonify({"filename": filename, "size": len(data), "detection": result}), 200
+    return jsonify({"filename": temp_filename, "size": len(data), "detection": result}), 200
 
 
 def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1):
