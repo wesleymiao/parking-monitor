@@ -90,7 +90,7 @@ def _preprocess(img):
     return blob, scale, 0, 0  # scale, pad_x, pad_y
 
 
-def _postprocess(output, scale):
+def _postprocess(output, scale, conf_threshold=CONF_THRESHOLD):
     """Extract vehicle detections from YOLOv8 output."""
     # output shape: [1, 84, 8400] -> transpose to [8400, 84]
     predictions = output[0].transpose()
@@ -105,7 +105,7 @@ def _postprocess(output, scale):
         class_id = int(np.argmax(class_scores))
         confidence = float(class_scores[class_id])
 
-        if confidence < CONF_THRESHOLD:
+        if confidence < conf_threshold:
             continue
         if class_id not in VEHICLE_CLASSES:
             continue
@@ -128,7 +128,7 @@ def _postprocess(output, scale):
     scores_arr = np.array(scores, dtype=np.float32)
     # Convert to x, y, w, h for cv2.dnn.NMSBoxes
     nms_boxes = [[b[0], b[1], b[2] - b[0], b[3] - b[1]] for b in boxes]
-    indices = cv2.dnn.NMSBoxes(nms_boxes, scores_arr.tolist(), CONF_THRESHOLD, IOU_THRESHOLD)
+    indices = cv2.dnn.NMSBoxes(nms_boxes, scores_arr.tolist(), conf_threshold, IOU_THRESHOLD)
 
     results = []
     for i in np.array(indices).flatten():
@@ -161,14 +161,15 @@ def _box_overlap(spot_box, vehicle_box):
     return intersection / spot_area
 
 
-def detect(image_path, spots, model_name=None):
+def detect(image_path, spots, model_name=None, confidence=None):
     """
     Detect open/occupied parking spots.
 
     Args:
         image_path: path to the image file
         spots: list of spot dicts with id, x, y, w, h (normalized 0-1)
-        model_name: which YOLO model to use (default from settings)
+        model_name: which YOLO model to use
+        confidence: confidence threshold (default CONF_THRESHOLD)
 
     Returns:
         dict with total, open, occupied lists and vehicle detections
@@ -184,7 +185,8 @@ def detect(image_path, spots, model_name=None):
     blob, scale, _, _ = _preprocess(img)
     input_name = session.get_inputs()[0].name
     output = session.run(None, {input_name: blob})
-    vehicles = _postprocess(output[0], scale)
+    conf = confidence if confidence is not None else CONF_THRESHOLD
+    vehicles = _postprocess(output[0], scale, conf)
 
     log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 

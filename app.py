@@ -61,7 +61,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8l"}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8l", "confidence": 0.1}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
@@ -130,6 +130,8 @@ def config_settings():
         settings["detect_end"] = request.json.get("detect_end", settings["detect_end"])
         if "model" in request.json:
             settings["model"] = request.json["model"]
+        if "confidence" in request.json:
+            settings["confidence"] = float(request.json["confidence"])
         save_settings(settings)
         return jsonify(settings), 200
     settings = load_settings()
@@ -201,7 +203,8 @@ def upload():
         log.info("Running detection...")
         t0 = time.time()
         model_name = settings.get("model", "yolov8l")
-        result = detect_open_spots(filepath, model_name)
+        confidence = settings.get("confidence", 0.1)
+        result = detect_open_spots(filepath, model_name, confidence)
         inference_ms = int((time.time() - t0) * 1000)
         log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
         labeled = result.get("labeled_image", filename)
@@ -228,12 +231,12 @@ def upload():
     return jsonify({"filename": filename, "size": len(data), "detection": result}), 200
 
 
-def detect_open_spots(image_path, model_name="yolov8l"):
+def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1):
     spots = load_spots()
     if not spots:
         log.warning("Detection not calibrated — no spots defined")
         return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
-    return detect_vehicles(image_path, spots, model_name=model_name)
+    return detect_vehicles(image_path, spots, model_name=model_name, confidence=confidence)
 
 
 def notify_if_changed(result, image_url):

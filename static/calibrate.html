@@ -148,6 +148,12 @@
             <select id="modelSelect" style="padding:6px;"></select>
             <span id="modelInfo" style="color:#888; font-size:13px;"></span>
         </div>
+        <h2>Confidence Threshold</h2>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <input type="range" id="confSlider" min="0.05" max="0.9" step="0.05" value="0.1" style="flex:1;">
+            <span id="confValue" style="font-weight:600; min-width:40px;">0.10</span>
+        </div>
+        <p style="color:#888; font-size:12px; margin-bottom:12px;">Lower = more detections (higher recall), Higher = fewer but more confident detections</p>
         <button class="btn" onclick="saveSchedule()">Save Settings</button>
         <span id="scheduleStatus" class="status"></span>
     </div>
@@ -358,7 +364,13 @@
 
         const modelSel = document.getElementById("modelSelect");
         const modelInfo = document.getElementById("modelInfo");
+        const confSlider = document.getElementById("confSlider");
+        const confValue = document.getElementById("confValue");
         const modelSizes = { yolov8n: "6MB", yolov8s: "43MB", yolov8m: "100MB", yolov8l: "167MB" };
+
+        confSlider.addEventListener("input", () => {
+            confValue.textContent = parseFloat(confSlider.value).toFixed(2);
+        });
 
         async function loadSchedule() {
             const res = await fetch("/config/settings");
@@ -366,6 +378,8 @@
                 const s = await res.json();
                 startSel.value = s.detect_start;
                 endSel.value = s.detect_end;
+                confSlider.value = s.confidence || 0.1;
+                confValue.textContent = parseFloat(confSlider.value).toFixed(2);
                 modelSel.innerHTML = "";
                 (s.available_models || []).forEach(m => {
                     modelSel.innerHTML += `<option value="${m}" ${m === s.model ? "selected" : ""}>${m} (${modelSizes[m] || ""})</option>`;
@@ -384,6 +398,7 @@
                     detect_start: parseInt(startSel.value),
                     detect_end: parseInt(endSel.value),
                     model: modelSel.value,
+                    confidence: parseFloat(confSlider.value),
                     api_key: apiKey
                 })
             });
