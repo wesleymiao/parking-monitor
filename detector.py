@@ -199,21 +199,28 @@ def detect(image_path, spots, model_name=None, confidence=None):
     input_name = session.get_inputs()[0].name
     conf = confidence if confidence is not None else CONF_THRESHOLD
 
+    variant_names = ["original", "brighter", "high contrast"]
     variants = [
-        img,                                                          # original
-        cv2.convertScaleAbs(img, alpha=1.2, beta=20),                 # brighter
-        cv2.convertScaleAbs(img, alpha=1.3, beta=-10),                # higher contrast
+        img,
+        cv2.convertScaleAbs(img, alpha=1.2, beta=20),
+        cv2.convertScaleAbs(img, alpha=1.3, beta=-10),
     ]
 
     all_vehicles = []
     ever_occupied = set()
+    best_variant_idx = 0
+    most_detections = -1
 
     for run, variant in enumerate(variants):
         blob, scale, _, _ = _preprocess(variant)
         output = session.run(None, {input_name: blob})
         vehicles = _postprocess(output[0], scale, conf)
         all_vehicles.extend(vehicles)
-        log.info(f"Run {run+1}: detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+        log.info(f"Run {run+1} ({variant_names[run]}): detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+
+        if len(vehicles) > most_detections:
+            most_detections = len(vehicles)
+            best_variant_idx = run
 
         for spot in spots:
             sx1 = spot["x"] * w
@@ -226,6 +233,10 @@ def detect(image_path, spots, model_name=None, confidence=None):
                 if _box_overlap(spot_box, v["box"]) > 0:
                     ever_occupied.add(spot["id"])
                     break
+
+    best_variant_name = variant_names[best_variant_idx]
+    best_variant_img = variants[best_variant_idx]
+    log.info(f"Best variant for labeling: {best_variant_name} ({most_detections} detections)")
 
     open_spots = []
     occupied_spots = []
@@ -250,20 +261,21 @@ def detect(image_path, spots, model_name=None, confidence=None):
         if not is_dup:
             unique_vehicles.append(v)
 
-    # Draw labeled image
+    # Draw labeled image using best variant
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
-    _draw_labels(img, spots, unique_vehicles, open_spots, occupied_spots, labeled_path)
+    _draw_labels(best_variant_img, spots, unique_vehicles, open_spots, occupied_spots, labeled_path, best_variant_name)
 
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
         "vehicles": len(unique_vehicles),
+        "variant": best_variant_name,
         "labeled_image": os.path.basename(labeled_path),
     }
 
 
-def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path):
+def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path, variant_name=""):
     """Draw spot regions and vehicle boxes on the image."""
     labeled = img.copy()
     h, w = labeled.shape[:2]
@@ -296,5 +308,10 @@ def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path):
 
         label = f"#{spot_id} OPEN"
         cv2.putText(labeled, label, (sx1 + 4, sy2 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+    # Draw variant name in top-left corner
+    if variant_name:
+        label = f"variant: {variant_name}"
+        cv2.putText(labeled, label, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imwrite(output_path, labeled)
