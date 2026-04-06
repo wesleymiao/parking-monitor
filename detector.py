@@ -216,89 +216,53 @@ def detect(image_path, spots, model_name=None, confidence=None):
     h, w = img.shape[:2]
     session = _get_session(model_name or "yolov8l")
 
-    # Run YOLO inference 3 times with image variations, union of occupied results
+    # Run YOLO inference
     input_name = session.get_inputs()[0].name
     conf = confidence if confidence is not None else CONF_THRESHOLD
 
-    variant_names = ["original", "brighter", "high contrast"]
-    variants = [
-        img,
-        cv2.convertScaleAbs(img, alpha=1.2, beta=20),
-        cv2.convertScaleAbs(img, alpha=1.3, beta=-10),
-    ]
+    blob, scale, _, _ = _preprocess(img)
+    output = session.run(None, {input_name: blob})
+    vehicles = _postprocess(output[0], scale, conf)
+    all_objects = _postprocess(output[0], scale, conf, vehicle_only=False)
 
-    all_vehicles = []
-    ever_occupied = set()
-    best_variant_idx = 0
-    most_detections = -1
-
-    for run, variant in enumerate(variants):
-        blob, scale, _, _ = _preprocess(variant)
-        output = session.run(None, {input_name: blob})
-        vehicles = _postprocess(output[0], scale, conf)
-        all_vehicles.extend(vehicles)
-        log.info(f"Run {run+1} ({variant_names[run]}): detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
-
-        if len(vehicles) > most_detections:
-            most_detections = len(vehicles)
-            best_variant_idx = run
-
-        for spot in spots:
-            sx1 = spot["x"] * w
-            sy1 = spot["y"] * h
-            sx2 = sx1 + spot["w"] * w
-            sy2 = sy1 + spot["h"] * h
-            spot_box = [sx1, sy1, sx2, sy2]
-
-            for v in vehicles:
-                if _box_overlap(spot_box, v["box"]) > 0:
-                    ever_occupied.add(spot["id"])
-                    break
-
-    best_variant_name = variant_names[best_variant_idx]
-    best_variant_img = variants[best_variant_idx]
-    log.info(f"Best variant for labeling: {best_variant_name} ({most_detections} detections)")
+    log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 
     open_spots = []
     occupied_spots = []
+
     for spot in spots:
-        if spot["id"] in ever_occupied:
+        sx1 = spot["x"] * w
+        sy1 = spot["y"] * h
+        sx2 = sx1 + spot["w"] * w
+        sy2 = sy1 + spot["h"] * h
+        spot_box = [sx1, sy1, sx2, sy2]
+
+        is_occupied = False
+        for v in vehicles:
+            if _box_overlap(spot_box, v["box"]) > 0:
+                is_occupied = True
+                log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={_box_overlap(spot_box, v['box']):.2f})")
+                break
+
+        if is_occupied:
             occupied_spots.append(spot["id"])
-            log.info(f"Spot {spot['id']}: occupied")
         else:
             open_spots.append(spot["id"])
             log.info(f"Spot {spot['id']}: open")
 
-    # Deduplicate vehicles for drawing (keep highest score per overlapping box)
-    unique_vehicles = []
-    for v in all_vehicles:
-        is_dup = False
-        for u in unique_vehicles:
-            if _box_overlap_iou(v["box"], u["box"]) > 0.5:
-                if v["score"] > u["score"]:
-                    u.update(v)
-                is_dup = True
-                break
-        if not is_dup:
-            unique_vehicles.append(v)
-
-    # Draw labeled image using best variant
+    # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
-    _draw_labels(best_variant_img, spots, unique_vehicles, open_spots, occupied_spots, labeled_path, best_variant_name)
+    _draw_labels(img, spots, vehicles, open_spots, occupied_spots, labeled_path)
 
     # Draw debug image with ALL detected objects
     debug_path = image_path.replace(".jpg", "_debug.jpg")
-    blob_debug, scale_debug, _, _ = _preprocess(best_variant_img)
-    output_debug = session.run(None, {input_name: blob_debug})
-    all_objects = _postprocess(output_debug[0], scale_debug, conf, vehicle_only=False)
-    _draw_debug(best_variant_img, all_objects, debug_path, best_variant_name)
+    _draw_debug(img, all_objects, debug_path)
 
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
-        "vehicles": len(unique_vehicles),
-        "variant": best_variant_name,
+        "vehicles": len(vehicles),
         "labeled_image": os.path.basename(labeled_path),
         "debug_image": os.path.basename(debug_path),
     }
