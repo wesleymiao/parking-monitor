@@ -290,7 +290,6 @@ def upload():
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
         result = {"skipped": True}
-        append_timeline("not_monitored", now_str)
         # Remove temp file since no detection
         if os.path.isfile(temp_filepath):
             os.remove(temp_filepath)
