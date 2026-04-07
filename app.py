@@ -171,6 +171,9 @@ def timeline():
     detect_start = settings.get("detect_start", 6)
     detect_end = settings.get("detect_end", 18)
 
+    # Filter out not_monitored
+    events = [e for e in events if e["status"] != "not_monitored"]
+
     if not events:
         return jsonify({"days": [], "detect_start": detect_start, "detect_end": detect_end})
 
