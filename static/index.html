@@ -401,7 +401,11 @@
                 const statusLabels = { open: "Open spots", occupied: "All occupied", not_monitored: "Not monitored" };
                 const startTime = seg.start.substring(11);
                 const endTime = seg.end.substring(11);
-                infoEl.innerHTML = `<div class="timeline-info"><strong>${statusLabels[seg.status]}</strong> — ${startTime} to ${endTime} — ${seg.count} detections</div>`;
+                const startDate = new Date(seg.start.replace(" ", "T"));
+                const endDate = new Date(seg.end.replace(" ", "T"));
+                const durationMin = Math.round((endDate - startDate) / 60000);
+                const durStr = durationMin >= 60 ? `${Math.floor(durationMin/60)}h ${durationMin%60}m` : `${durationMin}m`;
+                infoEl.innerHTML = `<div class="timeline-info"><strong>${statusLabels[seg.status]}</strong> — ${startTime} to ${endTime} — ${seg.count} detections, ${durStr}</div>`;
             }
             document.querySelectorAll(".timeline-seg").forEach(el => {
                 el.classList.toggle("selected", el.dataset.key === selectedSegKey);
