@@ -165,23 +165,41 @@ def config_settings():
 
 @app.route("/timeline")
 def timeline():
-    """Return timeline segments for the past 3 days."""
+    """Return timeline segments for the past 3 days, grouped by day."""
     events = load_timeline()
-    if not events:
-        return jsonify([])
+    settings = load_settings()
+    detect_start = settings.get("detect_start", 6)
+    detect_end = settings.get("detect_end", 18)
 
-    # Group consecutive same-status events into segments
-    segments = []
-    current = {"status": events[0]["status"], "start": events[0]["time"], "end": events[0]["time"], "count": 1}
-    for e in events[1:]:
-        if e["status"] == current["status"]:
-            current["end"] = e["time"]
-            current["count"] += 1
-        else:
-            segments.append(current)
-            current = {"status": e["status"], "start": e["time"], "end": e["time"], "count": 1}
-    segments.append(current)
-    return jsonify(segments)
+    if not events:
+        return jsonify({"days": [], "detect_start": detect_start, "detect_end": detect_end})
+
+    # Group events by date
+    days_events = {}
+    for e in events:
+        day = e["time"][:10]  # "YYYY-MM-DD"
+        if day not in days_events:
+            days_events[day] = []
+        days_events[day].append(e)
+
+    # Build segments per day
+    days = []
+    for day in sorted(days_events.keys())[-3:]:
+        day_evts = days_events[day]
+        segments = []
+        current = {"status": day_evts[0]["status"], "start": day_evts[0]["time"], "end": day_evts[0]["time"], "count": 1}
+        for e in day_evts[1:]:
+            if e["status"] == current["status"]:
+                current["end"] = e["time"]
+                current["count"] += 1
+            else:
+                segments.append(current)
+                current = {"status": e["status"], "start": e["time"], "end": e["time"], "count": 1}
+        segments.append(current)
+        total = sum(s["count"] for s in segments)
+        days.append({"date": day, "segments": segments, "total": total})
+
+    return jsonify({"days": days, "detect_start": detect_start, "detect_end": detect_end})
 
 
 @app.route("/config/spots", methods=["GET", "POST"])
