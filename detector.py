@@ -230,6 +230,9 @@ def detect(image_path, spots, model_name=None, confidence=None):
     occupied_spots = []
 
     for spot in spots:
+        if spot.get("enabled") is False:
+            log.info(f"Spot {spot['id']}: disabled, skipping")
+            continue
         sx1 = spot["x"] * w
         sy1 = spot["y"] * h
         sx2 = sx1 + spot["w"] * w

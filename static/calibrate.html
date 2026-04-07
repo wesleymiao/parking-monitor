@@ -244,23 +244,30 @@
             spots.forEach((s, i) => {
                 const x = s.x * canvas.width, y = s.y * canvas.height;
                 const w = s.w * canvas.width, h = s.h * canvas.height;
-                ctx.strokeStyle = "#00e676";
+                const enabled = s.enabled !== false;
+                ctx.strokeStyle = enabled ? "#00e676" : "#999";
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, y, w, h);
-                ctx.fillStyle = "rgba(0, 230, 118, 0.2)";
+                ctx.fillStyle = enabled ? "rgba(0, 230, 118, 0.2)" : "rgba(150, 150, 150, 0.2)";
                 ctx.fillRect(x, y, w, h);
                 ctx.fillStyle = "#fff";
                 ctx.font = "bold 16px system-ui";
-                ctx.fillText(`#${s.id}`, x + 4, y + 18);
+                ctx.fillText(`#${s.id}${enabled ? "" : " (off)"}`, x + 4, y + 18);
             });
             updateSpotList();
         }
 
+        function toggleSpot(idx) {
+            spots[idx].enabled = spots[idx].enabled === false ? true : false;
+            redraw();
+        }
+
         function updateSpotList() {
             const el = document.getElementById("spotList");
-            el.innerHTML = spots.map(s =>
-                `<span class="spot-item">#${s.id}</span>`
-            ).join("") || "<em>No spots drawn yet</em>";
+            el.innerHTML = spots.map((s, i) => {
+                const enabled = s.enabled !== false;
+                return `<span class="spot-item" style="cursor:pointer; opacity:${enabled ? 1 : 0.5};" onclick="toggleSpot(${i})" title="Click to ${enabled ? 'disable' : 'enable'}">#${s.id} ${enabled ? '✓' : '✗'}</span>`;
+            }).join("") || "<em>No spots drawn yet</em>";
         }
 
         function getCanvasPos(e) {
@@ -313,7 +320,7 @@
 
             if (w < 0.01 || h < 0.01) return; // too small, ignore
 
-            spots.push({ id: spots.length + 1, x, y, w, h });
+            spots.push({ id: spots.length + 1, x, y, w, h, enabled: true });
             redraw();
         }
 
