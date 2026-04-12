@@ -116,8 +116,8 @@
             border-radius: 4px;
         }
 
-        .timeline-bar { display: flex; height: 24px; border-radius: 4px; overflow: hidden; }
-        .timeline-seg { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; min-width: 2px; cursor: pointer; opacity: 0.85; transition: opacity 0.15s; }
+        .timeline-bar { position: relative; height: 24px; border-radius: 4px; overflow: hidden; flex: 1; background: #e8e8e8; }
+        .timeline-seg { position: absolute; height: 100%; min-width: 3px; cursor: pointer; opacity: 0.85; transition: opacity 0.15s; }
         .timeline-seg:hover { opacity: 1; }
         .timeline-seg.selected { opacity: 1; outline: 2px solid #333; outline-offset: -2px; }
         .timeline-seg.open { background: #4caf50; }
@@ -126,9 +126,9 @@
         .timeline-legend { display: flex; gap: 15px; font-size: 12px; margin-bottom: 10px; }
         .timeline-legend span { display: flex; align-items: center; gap: 4px; }
         .timeline-legend .dot { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
-        .timeline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .timeline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
         .timeline-date { font-size: 12px; color: #555; font-weight: 600; min-width: 80px; }
-        .timeline-hours { font-size: 10px; color: #999; display: flex; justify-content: space-between; min-width: 0; flex: 1; }
+        .timeline-window { font-size: 10px; color: #999; min-width: 36px; text-align: right; }
         .timeline-info { font-size: 12px; color: #555; margin-top: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px; }
 
         .filter-btn {
@@ -413,6 +413,18 @@
             loadGallery(1);
         }
 
+        function timeToMinutes(timeStr) {
+            const [h, m, s] = timeStr.split(" ")[1].split(":").map(Number);
+            return h * 60 + m + s / 60;
+        }
+
+        const WINDOWS = [
+            { label: "00-06", start: 0,    end: 360  },
+            { label: "06-12", start: 360,  end: 720  },
+            { label: "12-18", start: 720,  end: 1080 },
+            { label: "18-24", start: 1080, end: 1440 },
+        ];
+
         async function loadTimeline() {
             const el = document.getElementById("timeline");
             const infoEl = document.getElementById("timelineInfo");
@@ -420,8 +432,6 @@
                 const res = await fetch("/timeline");
                 const data = await res.json();
                 allSegments = data.days || [];
-                const detectStart = data.detect_start || 6;
-                const detectEnd = data.detect_end || 18;
 
                 if (!allSegments.length) {
                     el.innerHTML = '<span style="color:#888; font-style:italic;">No data yet</span>';
@@ -435,28 +445,29 @@
 
                 let rows = "";
                 allSegments.forEach((day, dayIdx) => {
-                    const total = day.total || 1;
-                    let bar = '<div class="timeline-bar" style="flex:1;">';
-                    day.segments.forEach((seg, segIdx) => {
-                        const pct = Math.max((seg.count / total) * 100, 1);
-                        const label = seg.count > 2 ? seg.count : "";
-                        const key = `${dayIdx}-${segIdx}`;
-                        const sel = selectedSegKey === key ? " selected" : "";
-                        bar += `<div class="timeline-seg ${seg.status}${sel}" data-key="${key}" style="width:${pct}%" onclick="selectSegment(${dayIdx},${segIdx})">${label}</div>`;
+                    WINDOWS.forEach((win, winIdx) => {
+                        const dateLabel = winIdx === 0 ? day.date : "";
+                        let bar = '<div class="timeline-bar">';
+                        day.segments.forEach((seg, segIdx) => {
+                            const segStart = timeToMinutes(seg.start);
+                            const segEnd = Math.max(timeToMinutes(seg.end), segStart + 0.5);
+                            if (segStart >= win.end || segEnd <= win.start) return;
+                            const clippedStart = Math.max(segStart, win.start);
+                            const clippedEnd = Math.min(segEnd, win.end);
+                            const leftPct = (clippedStart - win.start) / 360 * 100;
+                            const widthPct = Math.max((clippedEnd - clippedStart) / 360 * 100, 0.3);
+                            const key = `${dayIdx}-${segIdx}`;
+                            const sel = selectedSegKey === key ? " selected" : "";
+                            bar += `<div class="timeline-seg ${seg.status}${sel}" data-key="${key}" style="left:${leftPct}%;width:${widthPct}%;" onclick="selectSegment(${dayIdx},${segIdx})"></div>`;
+                        });
+                        bar += '</div>';
+                        rows += `<div class="timeline-row">
+                            <span class="timeline-date">${dateLabel}</span>
+                            <span class="timeline-window">${win.label}</span>
+                            ${bar}
+                        </div>`;
                     });
-                    bar += '</div>';
-
-                    rows += `<div class="timeline-row">
-                        <span class="timeline-date">${day.date}</span>
-                        ${bar}
-                    </div>
-                    <div style="display:flex; margin-bottom:8px;">
-                        <span style="min-width:80px;"></span>
-                        <div class="timeline-hours">
-                            <span>${String(detectStart).padStart(2,"0")}:00</span>
-                            <span>${String(detectEnd).padStart(2,"0")}:00</span>
-                        </div>
-                    </div>`;
+                    rows += '<div style="margin-bottom:6px;"></div>';
                 });
 
                 el.innerHTML = legend + rows;
