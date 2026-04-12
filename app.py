@@ -302,7 +302,7 @@ def upload():
         t0 = time_mod.time()
         model_name = settings.get("model", "yolov8l")
         confidence = settings.get("confidence", 0.1)
-        result = detect_open_spots(temp_filepath, model_name, confidence)
+        result = detect_open_spots(temp_filepath, model_name, confidence, crop=crop)
         inference_ms = int((time_mod.time() - t0) * 1000)
         log.info(f"Detection result: {result} (inference: {inference_ms}ms)")
 
@@ -338,11 +338,19 @@ def upload():
     return jsonify({"filename": temp_filename, "size": len(data), "detection": result}), 200
 
 
-def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1):
+def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1, crop=None):
     spots = load_spots()
     if not spots:
         log.warning("Detection not calibrated — no spots defined")
         return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
+    if crop:
+        spots = [{
+            **s,
+            "x": (s["x"] - crop["x"]) / crop["w"],
+            "y": (s["y"] - crop["y"]) / crop["h"],
+            "w": s["w"] / crop["w"],
+            "h": s["h"] / crop["h"],
+        } for s in spots]
     if model_name == "gpt4":
         return detect_llm(image_path, spots)
     return detect_vehicles(image_path, spots, model_name=model_name, confidence=confidence)
