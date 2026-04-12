@@ -226,6 +226,9 @@ def _detect_azure_cv(image_path):
             return []
 
         result = resp.json()
+        log.info(f"Azure CV response keys: {list(result.keys())}")
+        if "objectsResult" not in result:
+            log.warning(f"Azure CV response (no objectsResult): {str(result)[:500]}")
         all_objects = result.get("objectsResult", {}).get("values", [])
         log.info(f"Azure CV raw: {len(all_objects)} objects: {[o.get('tags', [{}])[0].get('name', '?') for o in all_objects]}")
         vehicles = []
