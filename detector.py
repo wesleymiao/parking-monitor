@@ -54,6 +54,7 @@ IOU_THRESHOLD = 0.45
 OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 
 # Azure Computer Vision
+AZURE_CV_ENABLED = False  # set to True to re-enable Azure CV dual detection
 AZURE_CV_ENDPOINT = os.environ.get("AZURE_CV_ENDPOINT", "")
 AZURE_CV_KEY = os.environ.get("AZURE_CV_KEY", "")
 AZURE_CV_VEHICLE_TAGS = {"car", "truck", "bus", "motorcycle", "vehicle", "van", "suv", "taxi", "minivan",
@@ -286,10 +287,14 @@ def detect(image_path, spots, model_name=None, confidence=None):
     log.info(f"YOLO detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
 
     # Run Azure Computer Vision and merge results
-    azure_vehicles = _detect_azure_cv(image_path)
+    if AZURE_CV_ENABLED:
+        azure_vehicles = _detect_azure_cv(image_path)
+    else:
+        azure_vehicles = []
+        log.info("Azure CV disabled, skipping")
     all_vehicles = vehicles + azure_vehicles
 
-    log.info(f"Total detections (YOLO + Azure CV): {len(all_vehicles)}")
+    log.info(f"Total detections (YOLO only): {len(all_vehicles)}")
 
     open_spots = []
     occupied_spots = []
