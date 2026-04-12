@@ -8,7 +8,7 @@ const char* password   = "YOUR_WIFI_PASSWORD";
 const char* serverUrl  = "https://parking-monitor-aueha3gchuegehez.japanwest-01.azurewebsites.net/upload";
 const char* apiKey     = "YOUR_API_KEY";
 
-#define UPLOAD_INTERVAL 30000  // 30 seconds
+#define UPLOAD_INTERVAL 5000  // 30 seconds
 
 // ---- AI Thinker ESP32-CAM pin config ----
 #define PWDN_GPIO_NUM     32
