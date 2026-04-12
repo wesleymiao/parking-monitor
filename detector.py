@@ -56,7 +56,8 @@ OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 # Azure Computer Vision
 AZURE_CV_ENDPOINT = os.environ.get("AZURE_CV_ENDPOINT", "")
 AZURE_CV_KEY = os.environ.get("AZURE_CV_KEY", "")
-AZURE_CV_VEHICLE_TAGS = {"car", "truck", "bus", "motorcycle", "vehicle", "van", "suv", "taxi", "minivan"}
+AZURE_CV_VEHICLE_TAGS = {"car", "truck", "bus", "motorcycle", "vehicle", "van", "suv", "taxi", "minivan",
+                         "land vehicle", "wheeled vehicle", "automobile", "motor vehicle"}
 
 _session = None
 _current_model = None
