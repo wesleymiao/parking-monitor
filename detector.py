@@ -99,7 +99,7 @@ def get_current_model():
 
 
 def get_available_models():
-    return list(AVAILABLE_MODELS.keys())
+    return list(AVAILABLE_MODELS.keys()) + ["gpt4"]
 
 
 def _preprocess(img):

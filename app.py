@@ -6,6 +6,7 @@ import logging
 import requests as http_requests
 from flask import Flask, request, abort, send_from_directory, jsonify
 from detector import detect as detect_vehicles, get_available_models, get_current_model
+from llm_detector import detect as detect_llm
 
 import sys
 
@@ -159,7 +160,7 @@ def config_settings():
         return jsonify(settings), 200
     settings = load_settings()
     settings["available_models"] = get_available_models()
-    settings["current_model"] = get_current_model()
+    settings["current_model"] = settings.get("model", get_current_model())
     return jsonify(settings)
 
 
@@ -305,6 +306,8 @@ def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1):
     if not spots:
         log.warning("Detection not calibrated — no spots defined")
         return {"total": 0, "open": [], "occupied": [], "error": "not calibrated"}
+    if model_name == "gpt4":
+        return detect_llm(image_path, spots)
     return detect_vehicles(image_path, spots, model_name=model_name, confidence=confidence)
 
 

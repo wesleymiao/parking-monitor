@@ -373,7 +373,7 @@
         const modelInfo = document.getElementById("modelInfo");
         const confSlider = document.getElementById("confSlider");
         const confValue = document.getElementById("confValue");
-        const modelSizes = { yolov8n: "6MB", yolov8s: "43MB", yolov8m: "100MB", yolov8l: "167MB", yolov9c: "97MB", yolo11m: "77MB", yolo11l: "97MB" };
+        const modelSizes = { yolov8n: "6MB", yolov8s: "43MB", yolov8m: "100MB", yolov8l: "167MB", yolov9c: "97MB", yolo11m: "77MB", yolo11l: "97MB", gpt4: "API" };
 
         confSlider.addEventListener("input", () => {
             confValue.textContent = parseFloat(confSlider.value).toFixed(2);
