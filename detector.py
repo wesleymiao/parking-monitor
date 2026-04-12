@@ -23,6 +23,7 @@ AVAILABLE_MODELS = {
     "yolov8s": f"{BLOB_BASE}/yolov8s.onnx",
     "yolov8m": f"{BLOB_BASE}/yolov8m.onnx",
     "yolov8l": f"{BLOB_BASE}/yolov8l.onnx",
+    "yolov9c": f"{BLOB_BASE}/yolov9c.onnx",
     "yolo11m": f"{BLOB_BASE}/yolo11m.onnx",
     "yolo11l": f"{BLOB_BASE}/yolo11l.onnx",
 }
