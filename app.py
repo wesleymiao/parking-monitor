@@ -338,8 +338,11 @@ def upload():
         if os.path.isfile(temp_filepath):
             os.remove(temp_filepath)
         # Clean up old images outside detection window
-        retention_days = settings.get("retention_days", 3)
-        cleanup_old_images(retention_days)
+        try:
+            retention_days = settings.get("retention_days", 3)
+            cleanup_old_images(retention_days)
+        except Exception as e:
+            log.error(f"Cleanup failed: {e}")
 
     return jsonify({"filename": temp_filename, "size": len(data), "detection": result}), 200
 
