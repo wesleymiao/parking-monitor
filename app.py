@@ -89,11 +89,11 @@ def save_timeline(timeline):
 
 
 def append_timeline(status, time_str):
-    """Append a detection event. Keep last 3 days only."""
+    """Append a detection event. Keep last 2 days only."""
     timeline = load_timeline()
     timeline.append({"status": status, "time": time_str})
-    # Prune entries older than 3 days
-    cutoff = (datetime.datetime.now(GMT8) - datetime.timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
+    # Prune entries older than 2 days
+    cutoff = (datetime.datetime.now(GMT8) - datetime.timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S")
     timeline = [e for e in timeline if e["time"] >= cutoff]
     save_timeline(timeline)
 
@@ -172,7 +172,7 @@ def config_settings():
 
 @app.route("/timeline")
 def timeline():
-    """Return timeline segments for the past 3 days, grouped by day."""
+    """Return timeline segments for the past 2 days, grouped by day."""
     events = load_timeline()
     settings = load_settings()
     detect_start = settings.get("detect_start", 6)
@@ -194,7 +194,7 @@ def timeline():
 
     # Build segments per day
     days = []
-    for day in sorted(days_events.keys())[-3:]:
+    for day in sorted(days_events.keys())[-2:]:
         day_evts = days_events[day]
         segments = []
         current = {"status": day_evts[0]["status"], "start": day_evts[0]["time"], "end": day_evts[0]["time"], "count": 1}
