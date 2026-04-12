@@ -370,7 +370,8 @@ def cleanup_old_images(retention_days):
             removed += 1
     if removed:
         save_metadata(meta)
-        log.info(f"Cleaned up {removed} images older than {retention_days} days")
+    total_images = sum(1 for f in os.listdir(UPLOAD_DIR) if f.endswith(".jpg"))
+    log.info(f"Cleanup: removed {removed}, remaining {total_images} images (retention: {retention_days} days, cutoff: {cutoff_str})")
 
 
 def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1, crop=None):
