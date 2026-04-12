@@ -63,7 +63,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1, "rotation": 0}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1, "rotation": 0, "crop": None}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
@@ -158,6 +158,8 @@ def config_settings():
             settings["confidence"] = float(request.json["confidence"])
         if "rotation" in request.json:
             settings["rotation"] = float(request.json["rotation"])
+        if "crop" in request.json:
+            settings["crop"] = request.json["crop"]  # {x, y, w, h} normalized or null
         save_settings(settings)
         return jsonify(settings), 200
     settings = load_settings()
@@ -280,6 +282,21 @@ def upload():
                 rotated = cv2.warpAffine(img, M, (new_w, new_h))
                 cv2.imwrite(temp_filepath, rotated)
                 log.info(f"Rotated image {rotation} degrees")
+
+        # Crop image if configured
+        crop = settings.get("crop")
+        if crop:
+            import cv2
+            img = cv2.imread(temp_filepath)
+            if img is not None:
+                h, w = img.shape[:2]
+                cx1 = int(crop["x"] * w)
+                cy1 = int(crop["y"] * h)
+                cx2 = cx1 + int(crop["w"] * w)
+                cy2 = cy1 + int(crop["h"] * h)
+                cropped = img[cy1:cy2, cx1:cx2]
+                cv2.imwrite(temp_filepath, cropped)
+                log.info(f"Cropped image to ({cx1},{cy1})-({cx2},{cy2})")
 
         log.info("Running detection...")
         t0 = time_mod.time()

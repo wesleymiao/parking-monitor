@@ -154,6 +154,13 @@
             <span id="rotValue" style="font-weight:600; min-width:40px;">0°</span>
         </div>
         <p style="color:#888; font-size:12px; margin-bottom:12px;">Counter-clockwise rotation applied to uploaded images before detection</p>
+        <h2>Crop Area</h2>
+        <p style="color:#888; font-size:12px; margin-bottom:8px;">Draw a rectangle on the reference image to define the detection area. Only the cropped region is sent to the model.</p>
+        <div style="margin-bottom:8px;">
+            <button class="btn secondary" onclick="startCropDraw()">Draw Crop</button>
+            <button class="btn danger" onclick="clearCrop()">Clear Crop</button>
+            <span id="cropInfo" style="color:#888; font-size:13px; margin-left:8px;"></span>
+        </div>
         <h2>Confidence Threshold</h2>
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
             <input type="range" id="confSlider" min="0.01" max="0.9" step="0.01" value="0.1" style="flex:1;">
@@ -260,6 +267,22 @@
                 ctx.font = "bold 16px system-ui";
                 ctx.fillText(`#${s.id}${enabled ? "" : " (off)"}`, x + 4, y + 18);
             });
+            // Draw crop overlay
+            if (cropRect) {
+                const cx = cropRect.x * canvas.width, cy = cropRect.y * canvas.height;
+                const cw = cropRect.w * canvas.width, ch = cropRect.h * canvas.height;
+                ctx.fillStyle = "rgba(0,0,0,0.4)";
+                ctx.fillRect(0, 0, canvas.width, cy);
+                ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch);
+                ctx.fillRect(0, cy, cx, ch);
+                ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch);
+                ctx.strokeStyle = "#ff00ff";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(cx, cy, cw, ch);
+                ctx.fillStyle = "#ff00ff";
+                ctx.font = "bold 13px system-ui";
+                ctx.fillText("CROP", cx + 4, cy + 15);
+            }
             updateSpotList();
         }
 
@@ -398,6 +421,8 @@
                 endSel.value = s.detect_end;
                 rotSlider.value = s.rotation || 0;
                 rotValue.textContent = `${rotSlider.value}°`;
+                cropRect = s.crop || null;
+                updateCropInfo();
                 confSlider.value = s.confidence || 0.1;
                 confValue.textContent = parseFloat(confSlider.value).toFixed(2);
                 modelSel.innerHTML = "";
@@ -406,6 +431,84 @@
                 });
                 modelInfo.textContent = `Active: ${s.current_model}`;
             }
+        }
+
+        // Crop area state
+        let cropRect = null; // {x, y, w, h} normalized
+        let cropDrawing = false;
+        let cropMode = false;
+        let cropStartX, cropStartY;
+
+        function startCropDraw() {
+            if (!refImage) { alert("Load reference image first."); return; }
+            cropMode = true;
+            canvas.style.cursor = "crosshair";
+            document.getElementById("cropInfo").textContent = "Draw crop rectangle on the image...";
+        }
+
+        function clearCrop() {
+            cropRect = null;
+            cropMode = false;
+            canvas.style.cursor = "crosshair";
+            document.getElementById("cropInfo").textContent = "Crop cleared";
+            redraw();
+        }
+
+        function updateCropInfo() {
+            const info = document.getElementById("cropInfo");
+            if (cropRect) {
+                const pct = (v) => (v * 100).toFixed(0);
+                info.textContent = `Crop: ${pct(cropRect.x)}%-${pct(cropRect.x+cropRect.w)}% x ${pct(cropRect.y)}%-${pct(cropRect.y+cropRect.h)}%`;
+            } else {
+                info.textContent = "No crop";
+            }
+        }
+
+        // Override canvas handlers to support crop mode
+        const origOnStart = onStart, origOnMove = onMove, origOnEnd = onEnd;
+
+        canvas.removeEventListener("mousedown", onStart);
+        canvas.removeEventListener("mousemove", onMove);
+        canvas.removeEventListener("mouseup", onEnd);
+
+        canvas.addEventListener("mousedown", (e) => {
+            if (cropMode) {
+                cropDrawing = true;
+                const pos = getCanvasPos(e);
+                cropStartX = pos.x; cropStartY = pos.y;
+            } else { origOnStart(e); }
+        });
+        canvas.addEventListener("mousemove", (e) => {
+            if (cropMode && cropDrawing) {
+                const pos = getCanvasPos(e);
+                redraw();
+                drawCropPreview(cropStartX, cropStartY, pos.x, pos.y);
+            } else if (!cropMode) { origOnMove(e); }
+        });
+        canvas.addEventListener("mouseup", (e) => {
+            if (cropMode && cropDrawing) {
+                cropDrawing = false;
+                cropMode = false;
+                canvas.style.cursor = "crosshair";
+                const pos = getCanvasPos(e);
+                const x = Math.min(cropStartX, pos.x) / canvas.width;
+                const y = Math.min(cropStartY, pos.y) / canvas.height;
+                const w = Math.abs(pos.x - cropStartX) / canvas.width;
+                const h = Math.abs(pos.y - cropStartY) / canvas.height;
+                if (w > 0.02 && h > 0.02) {
+                    cropRect = { x, y, w, h };
+                    updateCropInfo();
+                }
+                redraw();
+            } else if (!cropMode) { origOnEnd(e); }
+        });
+
+        function drawCropPreview(x1, y1, x2, y2) {
+            ctx.strokeStyle = "#ff00ff";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 4]);
+            ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+            ctx.setLineDash([]);
         }
 
         async function saveSchedule() {
@@ -420,6 +523,7 @@
                     model: modelSel.value,
                     rotation: parseFloat(rotSlider.value),
                     confidence: parseFloat(confSlider.value),
+                    crop: cropRect,
                     api_key: apiKey
                 })
             });
