@@ -62,7 +62,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolo11l", "confidence": 0.1}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
