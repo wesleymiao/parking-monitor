@@ -53,6 +53,11 @@ CONF_THRESHOLD = 0.1
 IOU_THRESHOLD = 0.45
 OVERLAP_THRESHOLD = 0.0  # any overlap means occupied
 
+# Azure Computer Vision
+AZURE_CV_ENDPOINT = os.environ.get("AZURE_CV_ENDPOINT", "")
+AZURE_CV_KEY = os.environ.get("AZURE_CV_KEY", "")
+AZURE_CV_VEHICLE_TAGS = {"car", "truck", "bus", "motorcycle", "vehicle", "van", "suv", "taxi", "minivan"}
+
 _session = None
 _current_model = None
 
@@ -196,6 +201,54 @@ def _box_overlap_iou(box_a, box_b):
     return intersection / (area_a + area_b - intersection)
 
 
+def _detect_azure_cv(image_path):
+    """Detect vehicles using Azure Computer Vision 4.0. Returns list of detections or empty list on failure."""
+    if not AZURE_CV_ENDPOINT or not AZURE_CV_KEY:
+        return []
+
+    try:
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+
+        url = f"{AZURE_CV_ENDPOINT.rstrip('/')}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=objects"
+        resp = dl_requests.post(
+            url,
+            headers={
+                "Ocp-Apim-Subscription-Key": AZURE_CV_KEY,
+                "Content-Type": "application/octet-stream",
+            },
+            data=image_data,
+            timeout=30,
+        )
+
+        if resp.status_code != 200:
+            log.warning(f"Azure CV returned {resp.status_code}: {resp.text[:200]}")
+            return []
+
+        result = resp.json()
+        vehicles = []
+        for obj in result.get("objectsResult", {}).get("values", []):
+            tags = obj.get("tags", [])
+            if not tags:
+                continue
+            tag_name = tags[0]["name"].lower()
+            tag_conf = tags[0]["confidence"]
+            if tag_name in AZURE_CV_VEHICLE_TAGS:
+                bb = obj["boundingBox"]
+                vehicles.append({
+                    "box": [bb["x"], bb["y"], bb["x"] + bb["w"], bb["y"] + bb["h"]],
+                    "score": tag_conf,
+                    "class": f"az:{tag_name}",
+                })
+
+        log.info(f"Azure CV detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+        return vehicles
+
+    except Exception as e:
+        log.warning(f"Azure CV failed: {e}")
+        return []
+
+
 def detect(image_path, spots, model_name=None, confidence=None):
     """
     Detect open/occupied parking spots.
@@ -224,7 +277,13 @@ def detect(image_path, spots, model_name=None, confidence=None):
     output = session.run(None, {input_name: blob})
     vehicles = _postprocess(output[0], scale, conf)
 
-    log.info(f"Detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+    log.info(f"YOLO detected {len(vehicles)} vehicles: {[v['class'] for v in vehicles]}")
+
+    # Run Azure Computer Vision and merge results
+    azure_vehicles = _detect_azure_cv(image_path)
+    all_vehicles = vehicles + azure_vehicles
+
+    log.info(f"Total detections (YOLO + Azure CV): {len(all_vehicles)}")
 
     open_spots = []
     occupied_spots = []
@@ -240,7 +299,7 @@ def detect(image_path, spots, model_name=None, confidence=None):
         spot_box = [sx1, sy1, sx2, sy2]
 
         is_occupied = False
-        for v in vehicles:
+        for v in all_vehicles:
             if _box_overlap(spot_box, v["box"]) > 0:
                 is_occupied = True
                 log.info(f"Spot {spot['id']}: occupied ({v['class']}, overlap={_box_overlap(spot_box, v['box']):.2f})")
@@ -254,13 +313,13 @@ def detect(image_path, spots, model_name=None, confidence=None):
 
     # Draw labeled image
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
-    _draw_labels(img, spots, vehicles, open_spots, occupied_spots, labeled_path)
+    _draw_labels(img, spots, all_vehicles, open_spots, occupied_spots, labeled_path)
 
     return {
         "total": len(spots),
         "open": sorted(open_spots),
         "occupied": sorted(occupied_spots),
-        "vehicles": len(vehicles),
+        "vehicles": len(all_vehicles),
         "labeled_image": os.path.basename(labeled_path),
     }
 
@@ -294,13 +353,15 @@ def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path, vari
     labeled = img.copy()
     h, w = labeled.shape[:2]
 
-    # Draw vehicle bounding boxes
+    # Draw vehicle bounding boxes (orange for YOLO, blue for Azure CV)
     for v in vehicles:
         x1, y1, x2, y2 = [int(c) for c in v["box"]]
-        cv2.rectangle(labeled, (x1, y1), (x2, y2), (0, 165, 255), 2)
+        is_azure = v["class"].startswith("az:")
+        color = (255, 140, 0) if is_azure else (0, 165, 255)
+        cv2.rectangle(labeled, (x1, y1), (x2, y2), color, 2)
         label = f"{v['class']} {v['score']:.0%}"
         (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(labeled, (x1, y1 - th - 6), (x1 + tw + 4, y1), (0, 165, 255), -1)
+        cv2.rectangle(labeled, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
         cv2.putText(labeled, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
     # Draw open spot regions only
