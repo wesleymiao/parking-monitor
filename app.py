@@ -331,15 +331,15 @@ def upload():
         if labeled != temp_filename and os.path.isfile(temp_filepath):
             os.remove(temp_filepath)
 
-        # Clean up old images
-        retention_days = settings.get("retention_days", 3)
-        cleanup_old_images(retention_days)
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
         result = {"skipped": True}
         # Remove temp file since no detection
         if os.path.isfile(temp_filepath):
             os.remove(temp_filepath)
+        # Clean up old images outside detection window
+        retention_days = settings.get("retention_days", 3)
+        cleanup_old_images(retention_days)
 
     return jsonify({"filename": temp_filename, "size": len(data), "detection": result}), 200
 
