@@ -63,7 +63,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1, "rotation": 0, "crop": None}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1, "rotation": 0, "crop": None, "retention_days": 3}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
@@ -160,6 +160,8 @@ def config_settings():
             settings["rotation"] = float(request.json["rotation"])
         if "crop" in request.json:
             settings["crop"] = request.json["crop"]  # {x, y, w, h} normalized or null
+        if "retention_days" in request.json:
+            settings["retention_days"] = int(request.json["retention_days"])
         save_settings(settings)
         return jsonify(settings), 200
     settings = load_settings()
@@ -328,6 +330,10 @@ def upload():
         # Remove original image, keep only labeled
         if labeled != temp_filename and os.path.isfile(temp_filepath):
             os.remove(temp_filepath)
+
+        # Clean up old images
+        retention_days = settings.get("retention_days", 3)
+        cleanup_old_images(retention_days)
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
         result = {"skipped": True}
@@ -336,6 +342,35 @@ def upload():
             os.remove(temp_filepath)
 
     return jsonify({"filename": temp_filename, "size": len(data), "detection": result}), 200
+
+
+def cleanup_old_images(retention_days):
+    """Delete images and metadata older than retention_days."""
+    cutoff = datetime.datetime.now(GMT8) - datetime.timedelta(days=retention_days)
+    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+    meta = load_metadata()
+    removed = 0
+    for fname in list(os.listdir(UPLOAD_DIR)):
+        if not fname.endswith(".jpg"):
+            continue
+        info = meta.get(fname, {})
+        img_time = info.get("time", "")
+        if not img_time:
+            # No metadata — use file mtime
+            fpath = os.path.join(UPLOAD_DIR, fname)
+            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(fpath), tz=GMT8)
+            if mtime >= cutoff:
+                continue
+        elif img_time >= cutoff_str:
+            continue
+        fpath = os.path.join(UPLOAD_DIR, fname)
+        if os.path.isfile(fpath):
+            os.remove(fpath)
+            meta.pop(fname, None)
+            removed += 1
+    if removed:
+        save_metadata(meta)
+        log.info(f"Cleaned up {removed} images older than {retention_days} days")
 
 
 def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1, crop=None):
