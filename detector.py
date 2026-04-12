@@ -226,8 +226,10 @@ def _detect_azure_cv(image_path):
             return []
 
         result = resp.json()
+        all_objects = result.get("objectsResult", {}).get("values", [])
+        log.info(f"Azure CV raw: {len(all_objects)} objects: {[o.get('tags', [{}])[0].get('name', '?') for o in all_objects]}")
         vehicles = []
-        for obj in result.get("objectsResult", {}).get("values", []):
+        for obj in all_objects:
             tags = obj.get("tags", [])
             if not tags:
                 continue
