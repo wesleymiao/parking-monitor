@@ -148,6 +148,12 @@
             <select id="modelSelect" style="padding:6px;"></select>
             <span id="modelInfo" style="color:#888; font-size:13px;"></span>
         </div>
+        <h2>Image Rotation</h2>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <input type="range" id="rotSlider" min="-90" max="90" step="1" value="0" style="flex:1;">
+            <span id="rotValue" style="font-weight:600; min-width:40px;">0°</span>
+        </div>
+        <p style="color:#888; font-size:12px; margin-bottom:12px;">Counter-clockwise rotation applied to uploaded images before detection</p>
         <h2>Confidence Threshold</h2>
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
             <input type="range" id="confSlider" min="0.01" max="0.9" step="0.01" value="0.1" style="flex:1;">
@@ -371,10 +377,15 @@
 
         const modelSel = document.getElementById("modelSelect");
         const modelInfo = document.getElementById("modelInfo");
+        const rotSlider = document.getElementById("rotSlider");
+        const rotValue = document.getElementById("rotValue");
         const confSlider = document.getElementById("confSlider");
         const confValue = document.getElementById("confValue");
         const modelSizes = { yolov8n: "6MB", yolov8s: "43MB", yolov8m: "100MB", yolov8l: "167MB", yolov9c: "97MB", yolo11m: "77MB", yolo11l: "97MB", gpt4: "API" };
 
+        rotSlider.addEventListener("input", () => {
+            rotValue.textContent = `${rotSlider.value}°`;
+        });
         confSlider.addEventListener("input", () => {
             confValue.textContent = parseFloat(confSlider.value).toFixed(2);
         });
@@ -385,6 +396,8 @@
                 const s = await res.json();
                 startSel.value = s.detect_start;
                 endSel.value = s.detect_end;
+                rotSlider.value = s.rotation || 0;
+                rotValue.textContent = `${rotSlider.value}°`;
                 confSlider.value = s.confidence || 0.1;
                 confValue.textContent = parseFloat(confSlider.value).toFixed(2);
                 modelSel.innerHTML = "";
@@ -405,6 +418,7 @@
                     detect_start: parseInt(startSel.value),
                     detect_end: parseInt(endSel.value),
                     model: modelSel.value,
+                    rotation: parseFloat(rotSlider.value),
                     confidence: parseFloat(confSlider.value),
                     api_key: apiKey
                 })

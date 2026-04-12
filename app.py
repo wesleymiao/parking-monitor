@@ -63,7 +63,7 @@ def save_metadata(meta):
 
 
 def load_settings():
-    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1}
+    defaults = {"detect_start": 6, "detect_end": 18, "model": "yolov8m", "confidence": 0.1, "rotation": 0}
     if os.path.isfile(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
@@ -156,6 +156,8 @@ def config_settings():
             settings["model"] = request.json["model"]
         if "confidence" in request.json:
             settings["confidence"] = float(request.json["confidence"])
+        if "rotation" in request.json:
+            settings["rotation"] = float(request.json["rotation"])
         save_settings(settings)
         return jsonify(settings), 200
     settings = load_settings()
@@ -261,6 +263,24 @@ def upload():
     settings = load_settings()
     hour = datetime.datetime.now(GMT8).hour
     if settings["detect_start"] <= hour < settings["detect_end"]:
+        # Rotate image if configured
+        rotation = settings.get("rotation", 0)
+        if rotation:
+            import cv2
+            img = cv2.imread(temp_filepath)
+            if img is not None:
+                h, w = img.shape[:2]
+                center = (w / 2, h / 2)
+                M = cv2.getRotationMatrix2D(center, rotation, 1.0)
+                cos, sin = abs(M[0, 0]), abs(M[0, 1])
+                new_w = int(h * sin + w * cos)
+                new_h = int(h * cos + w * sin)
+                M[0, 2] += (new_w - w) / 2
+                M[1, 2] += (new_h - h) / 2
+                rotated = cv2.warpAffine(img, M, (new_w, new_h))
+                cv2.imwrite(temp_filepath, rotated)
+                log.info(f"Rotated image {rotation} degrees")
+
         log.info("Running detection...")
         t0 = time_mod.time()
         model_name = settings.get("model", "yolov8l")
