@@ -378,24 +378,24 @@ def _draw_labels(img, spots, vehicles, open_ids, occupied_ids, output_path, vari
         cv2.rectangle(labeled, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
         cv2.putText(labeled, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    # Draw open spot regions only
+    # Draw all spot regions
     for spot in spots:
-        spot_id = spot["id"]
-        if spot_id not in open_ids:
+        if spot.get("enabled") is False:
             continue
-
+        spot_id = spot["id"]
         sx1 = int(spot["x"] * w)
         sy1 = int(spot["y"] * h)
         sx2 = sx1 + int(spot["w"] * w)
         sy2 = sy1 + int(spot["h"] * h)
 
-        color = (0, 200, 0)
+        is_open = spot_id in open_ids
+        color = (0, 200, 0) if is_open else (0, 0, 255)
         cv2.rectangle(labeled, (sx1, sy1), (sx2, sy2), color, 3)
         overlay = labeled.copy()
         cv2.rectangle(overlay, (sx1, sy1), (sx2, sy2), color, -1)
         cv2.addWeighted(overlay, 0.15, labeled, 0.85, 0, labeled)
 
-        label = f"#{spot_id} OPEN"
+        label = f"#{spot_id} OPEN" if is_open else f"#{spot_id}"
         cv2.putText(labeled, label, (sx1 + 4, sy2 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
     # Draw variant name in top-left corner

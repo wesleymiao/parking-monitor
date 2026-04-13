@@ -193,7 +193,7 @@
         <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
         <button class="filter-btn" onclick="setFilter('open', this)">Open spots detected</button>
         <button class="filter-btn" onclick="setFilter('occupied', this)">All spots occupied</button>
-        <button class="filter-btn" onclick="setFilter('original', this)">Original images</button>
+        <label style="margin-left:12px; font-size:13px; cursor:pointer;"><input type="checkbox" id="showOriginals" onchange="loadGallery(1)"> Show originals</label>
     </div>
     <div id="gallery" class="gallery"></div>
     <div id="pagination" style="margin-top:15px; text-align:center;"></div>
@@ -304,7 +304,9 @@
             const gallery = document.getElementById("gallery");
             const pagination = document.getElementById("pagination");
             try {
+                const showOrig = document.getElementById("showOriginals").checked;
                 let url = `/images?page=${page}&filter=${currentFilter}`;
+                if (!showOrig) url += `&hide_originals=1`;
                 if (timeFrom) url += `&from=${encodeURIComponent(timeFrom)}`;
                 if (timeTo) url += `&to=${encodeURIComponent(timeTo)}`;
                 const res = await fetch(url);

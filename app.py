@@ -327,9 +327,7 @@ def upload():
         has_open = len(result.get("open", [])) > 0
         append_timeline("open" if has_open else "occupied", now_str)
 
-        # Remove original image, keep only labeled
-        if labeled != temp_filename and os.path.isfile(temp_filepath):
-            os.remove(temp_filepath)
+        # Keep original image alongside labeled
 
     else:
         log.info(f"Outside detection hours (current: {hour}:00 GMT+8), skipping")
@@ -457,6 +455,7 @@ def list_images():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 100, type=int)
     filter_type = request.args.get("filter", "all")
+    hide_originals = request.args.get("hide_originals", "")
     time_from = request.args.get("from", "")
     time_to = request.args.get("to", "")
 
@@ -493,6 +492,9 @@ def list_images():
         elif filter_type == "occupied" and not (is_labeled and not has_open and has_occupied):
             continue
         elif filter_type == "original" and is_labeled:
+            continue
+
+        if hide_originals and not is_labeled:
             continue
 
         filtered.append(name)
