@@ -397,8 +397,8 @@ def detect_open_spots(image_path, model_name="yolov8l", confidence=0.1, crop=Non
             "w": s["w"] / crop["w"],
             "h": s["h"] / crop["h"],
         } for s in spots]
-    if model_name == "gpt4":
-        return detect_llm(image_path, spots)
+    if model_name in ("gpt4", "gpt4o"):
+        return detect_llm(image_path, spots, deployment={"gpt4": "gpt-4.1", "gpt4o": "gpt-4o"}[model_name])
     return detect_vehicles(image_path, spots, model_name=model_name, confidence=confidence)
 
 

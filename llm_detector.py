@@ -53,7 +53,7 @@ def _encode_image_base64(img):
     return base64.standard_b64encode(buf.tobytes()).decode("utf-8")
 
 
-def _call_openai_vision(image_b64, spot_ids):
+def _call_openai_vision(image_b64, spot_ids, deployment=None):
     """Send the annotated image to Azure OpenAI and get occupancy results."""
     from openai import AzureOpenAI
 
@@ -66,7 +66,7 @@ def _call_openai_vision(image_b64, spot_ids):
     spot_list = ", ".join(f"#{s}" for s in spot_ids)
 
     response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
+        model=deployment or AZURE_OPENAI_DEPLOYMENT,
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -129,7 +129,7 @@ def _parse_response(response_text, spot_ids):
     return sorted(open_spots), sorted(occupied_spots)
 
 
-def _draw_result_labels(img, spots, open_ids, occupied_ids, output_path):
+def _draw_result_labels(img, spots, open_ids, occupied_ids, output_path, model_label="gpt-4.1"):
     """Draw result labels on the image for all spots."""
     labeled = img.copy()
     h, w = labeled.shape[:2]
@@ -151,16 +151,17 @@ def _draw_result_labels(img, spots, open_ids, occupied_ids, output_path):
         label = f"#{spot_id} OPEN" if is_open else f"#{spot_id}"
         cv2.putText(labeled, label, (sx1 + 4, sy2 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-    cv2.putText(labeled, "gpt-4.1", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    cv2.putText(labeled, model_label, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     cv2.imwrite(output_path, labeled)
 
 
-def detect(image_path, spots):
+def detect(image_path, spots, deployment=None):
     """
     Detect open/occupied parking spots using Azure OpenAI vision.
 
     Returns dict with same shape as detector.detect().
     """
+    deploy_name = deployment or AZURE_OPENAI_DEPLOYMENT
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
         log.error("AZURE_OPENAI_ENDPOINT/AZURE_OPENAI_KEY not configured")
         return {"total": len(spots), "open": [], "occupied": [], "error": "Azure OpenAI not configured"}
@@ -176,17 +177,17 @@ def detect(image_path, spots):
     image_b64 = _encode_image_base64(annotated)
 
     try:
-        log.info(f"Calling Azure OpenAI vision for {len(enabled_spots)} spots...")
-        response_text = _call_openai_vision(image_b64, sorted(spot_ids))
+        log.info(f"Calling Azure OpenAI ({deploy_name}) vision for {len(enabled_spots)} spots...")
+        response_text = _call_openai_vision(image_b64, sorted(spot_ids), deployment=deploy_name)
         log.info(f"LLM response: {response_text[:300]}")
 
         open_spots, occupied_spots = _parse_response(response_text, spot_ids)
         log.info(f"LLM result: {len(open_spots)} open, {len(occupied_spots)} occupied")
 
         for sid in open_spots:
-            log.info(f"Spot {sid}: open (gpt-4.1)")
+            log.info(f"Spot {sid}: open ({deploy_name})")
         for sid in occupied_spots:
-            log.info(f"Spot {sid}: occupied (gpt-4.1)")
+            log.info(f"Spot {sid}: occupied ({deploy_name})")
 
     except Exception as e:
         log.error(f"Azure OpenAI vision failed: {e}")
@@ -194,7 +195,7 @@ def detect(image_path, spots):
         occupied_spots = sorted(spot_ids)
 
     labeled_path = image_path.replace(".jpg", "_labeled.jpg")
-    _draw_result_labels(img, enabled_spots, open_spots, occupied_spots, labeled_path)
+    _draw_result_labels(img, enabled_spots, open_spots, occupied_spots, labeled_path, deploy_name)
 
     return {
         "total": len(enabled_spots),
