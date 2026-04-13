@@ -287,11 +287,16 @@ def upload():
 
         # Crop image if configured
         crop = settings.get("crop")
+        precrop_filename = None
         if crop:
             import cv2
             img = cv2.imread(temp_filepath)
             if img is not None:
                 h, w = img.shape[:2]
+                # Save pre-crop copy (rotated full view)
+                precrop_filename = temp_filename.replace(".jpg", "_precrop.jpg")
+                cv2.imwrite(os.path.join(UPLOAD_DIR, precrop_filename), img)
+
                 cx1 = int(crop["x"] * w)
                 cy1 = int(crop["y"] * h)
                 cx2 = cx1 + int(crop["w"] * w)
@@ -312,15 +317,19 @@ def upload():
         image_url = f"{request.host_url}images/{labeled}"
         notify_if_changed(result, image_url)
 
-        # Store metadata for labeled image
+        # Store metadata for all image variants
         meta = load_metadata()
-        meta[labeled] = {
+        img_meta = {
             "source": source,
             "model": model_name,
             "open": result.get("open", []),
             "occupied": result.get("occupied", []),
             "time": now_str,
         }
+        meta[labeled] = img_meta
+        meta[temp_filename] = img_meta
+        if precrop_filename:
+            meta[precrop_filename] = img_meta
         save_metadata(meta)
 
         # Record timeline
